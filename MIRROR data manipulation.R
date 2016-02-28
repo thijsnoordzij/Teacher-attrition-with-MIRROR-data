@@ -18,7 +18,9 @@ data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.
 
 # 3. Create date variable out of GEBDAT
 
-# Create a custom function to specify the format of the numeric date variable GEBDAT
+# Create a custom function to specify the format of the numeric date variable
+# GEBDAT Found information on which symbols are used for the format() function
+# on http://www.statmethods.net/input/dates.html
 mydatefunc <- function(num_date){
   date <- as.Date(as.character(num_date), "%Y%m%d")
   return(date)
