@@ -11,5 +11,11 @@ data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.
 # user  system elapsed 
 # 40.72    0.33   41.08 
 
-library(plyr)
-count(data, 'JAAR')
+# To do: 
+# 1. How to get the value labels out of the SPSS-file?
+
+# 2. Convert some variables to nominal variables (factor?)
+
+# 3. Create date variable out of GEBDAT
+
+# 4. Fill missing GEBDAT is known within same id_2015
