@@ -18,12 +18,18 @@ data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.
 
 # 3. Create date variable out of GEBDAT
 
+# Create a custom function to specify the format of the numeric date variable GEBDAT
 mydatefunc <- function(num_date){
   date <- as.Date(as.character(num_date), "%Y%m%d")
   return(date)
 }
-
+# Create a new dataframe with the converted date from GEBDAT
+# It takes about 10 seconds to process the data
 GEBDAT2 <- as.data.frame(mydatefunc(data[,"GEBDAT"]))
+# system.time: 
+# user  system elapsed 
+# 11.83    0.14   11.97 
+# add dataframe as new variable to data
 data <- cbind(data, GEBDAT2)
 
 # 4. Fill missing GEBDAT is known within same id_2015
