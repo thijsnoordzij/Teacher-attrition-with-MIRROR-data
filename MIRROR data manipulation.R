@@ -26,3 +26,5 @@ data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.
 # SORT CASES BY id_2015(A) GESLACHT(D).
 # IF (id_2015 = LAG(id_2015)) AND (SYSMIS(GESLACHT) ) GESLACHT = LAG(GESLACHT). 
 # EXECUTE.
+
+# perhaps the zoo library has good options to handle missing data?
