@@ -14,6 +14,10 @@ data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.
 # To do: 
 # 1. How to get the value labels out of the SPSS-file?
 
+# Information on the haven package can be found at
+# https://cran.r-project.org/web/packages/haven/haven.pdf. Perhaps the
+# labelled() function?
+
 # 2. Convert some variables to nominal variables (factor?)
 
 # 3. Create date variable out of GEBDAT
