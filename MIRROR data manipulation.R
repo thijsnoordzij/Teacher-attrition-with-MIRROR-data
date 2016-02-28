@@ -18,4 +18,12 @@ data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.
 
 # 3. Create date variable out of GEBDAT
 
+mydatefunc <- function(num_date){
+  date <- as.Date(as.character(num_date), "%Y%m%d")
+  return(date)
+}
+
+GEBDAT2 <- as.data.frame(mydatefunc(data[,"GEBDAT"]))
+data <- cbind(data, GEBDAT2)
+
 # 4. Fill missing GEBDAT is known within same id_2015
