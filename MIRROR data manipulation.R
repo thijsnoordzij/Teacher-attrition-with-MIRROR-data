@@ -23,12 +23,14 @@ mydatefunc <- function(num_date){
   date <- as.Date(as.character(num_date), "%Y%m%d")
   return(date)
 }
+
 # Create a new dataframe with the converted date from GEBDAT
 # It takes about 10 seconds to process the data
-GEBDAT2 <- as.data.frame(mydatefunc(data[,"GEBDAT"]))
 # system.time: 
 # user  system elapsed 
 # 11.83    0.14   11.97 
+GEBDAT2 <- as.data.frame(mydatefunc(data[,"GEBDAT"]))
+
 # add dataframe as new variable to data
 data <- cbind(data, GEBDAT2)
 
