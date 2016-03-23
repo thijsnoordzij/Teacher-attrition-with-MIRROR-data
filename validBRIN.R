@@ -1,19 +1,12 @@
-library(haven)  
-data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.sav")
-
-# Goal: Validate BRIN
-# - Recode missing values to NA
-# - Check if remainig values comply to rules of BRIN (string-string-integer-integer)
-#
-# Strategy:
-#   - write function that identifies (in)correct values for BRIN
-#   - use apply function on data['BRIN']
+# validBRIN.R contains the function valid.brin. 
+# valid.brin is a function to check if entries in BRIN variable are valid.
+# A valid BRIN has 4 characters, 2 integers followed by 2 string charcters. 
 
 # function to identify correct BRIN (4 charcters: number, number, string, string)
 valid.brin <- function(x) {
   #   print(paste0("Hi, I'm checking if ", x, " is a valid BRIN"))
-  x <- as.character(x)
-  if (nchar(x) != 4) {
+  x <- trimws(as.character(x))
+  if (nchar((x)) != 4) {
     #     print("It's an invalid BRIN, it should be 4 characters long")
     return(FALSE)
   } else {
