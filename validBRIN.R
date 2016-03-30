@@ -5,8 +5,11 @@
 # function to identify correct BRIN (4 charcters: number, number, string, string)
 valid.brin <- function(x) {
   #   print(paste0("Hi, I'm checking if ", x, " is a valid BRIN"))
+  if (is.na(x)) {
+    return(NA)
+  }
   x <- trimws(as.character(x))
-  if (nchar((x)) != 4) {
+  if (nchar(x) != 4) {
     #     print("It's an invalid BRIN, it should be 4 characters long")
     return(FALSE)
   } else {
@@ -39,10 +42,12 @@ valid.brin <- function(x) {
 # tmp2 <- "O"
 # tmp3 <- "3333"
 # tmp4 <- 2222
+# tmp5 <- NA
 # valid.brin(tmp)   # TRUE
 # valid.brin(tmp2)  # FALSE
 # valid.brin(tmp3)  # FALSE
 # valid.brin(tmp4)  # FALSE
+# valid.brin(tmp5)  # NA
 
 # test valid.brin on subset of data['BRIN']
 # FBRIN <- data[1:5000,'BRIN']
