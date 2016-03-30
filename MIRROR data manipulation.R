@@ -1,15 +1,15 @@
 # Open MIRROR-file from SPSS .sav file extension
 
 # install.packages("haven")
-library(haven)  
 # haven package is faster than foreign package, and without error message. 
 # Variable labels are stored in the "label" attribute of each variable.
+library(haven)  
 
 # It takes almost 1 minute to load the data
-data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.sav")
 # system.time: 
 # user  system elapsed 
 # 40.72    0.33   41.08 
+data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.sav")
 testdata <- data[1:50001,]
 
 # Define NA in FUNGRP, BRIN, GEBDAT, GESLACHT
@@ -39,29 +39,40 @@ sum(is.na(data$GEBDAT))   # 4156
 sum(is.na(data$GESLACHT)) # 4059 (if " " is added as missing value, else 0)
 sum(is.na(data$FUNGRP))   # 10559, that includes 2431 system.missing in SPSS
 
+head(data$BRIN)
 
 # Validate BRIN
-# - Check if remainig values comply to rules of BRIN (string-string-integer-integer)
-#
-# Strategy:
-#   - write function that identifies (in)correct values for BRIN
-#   - use apply function on data['BRIN']
 # 
-# source valid.brin function to check if entries in BRIN variable are valid. 
+# BRIN is a unique identifier for a school. BRIN has a standard format: 4 
+# characters, number, number, character, character (e.g. "11AO"). Some BRIN in 
+# the MIRROR-file do not represent the school where the staff (teacher or 
+# otherwise) works. These 'BRIN' represent staff working under direct 
+# responsibility of the board. These BRIN have a free format, which deviates 
+# from the previously mentioned standard format. Possibly, these BRIN are also 
+# not identical for the same school in different years.
+# 
+# valid.brin is a function that identifies (in)correct values for BRIN. This
+# function is used to make a new variable in the data of the MIRROR-file
+# (data$validbrin). valid.brin is sourced from a separate file.
 source('E:/Google Drive/Promotie/Analyse/Teacher-attrition-with-MIRROR-data/validBRIN.R')
-# 
-# apply valid.brin on complete data['BRIN']
-y <- sapply(data[,'BRIN'], valid.brin) # werkt, maar duurt lang: >35 minuten
-# check if/how incorrect BRIN are related to other variables
-# 
+data$validbrin <- lapply(data$BRIN, valid.brin) # the funtion works, but it takes ca. 35 minutes to complete the operation. 
+
+# To do: check if/how incorrect BRIN are related to other variables
+# library(plyr)
+# count(data[,'JAAR'][!y])
+# count(data[!y,], vars = c('BESTUUR1'))
+
+
+# Duplicate records
 library(plyr)
-count(data[,'JAAR'][!y])
-count(data[!y,], vars = c('BESTUUR1'))
+testdataA <- testdata$id_2015
+testdataA <- as.data.frame(testdataA)
+cbind(testdataA, testdata$id_2015, testdata$GEBDAT, testdata$GESLACHT, testdata$JAAR, data$FUNGRP, testdata$BRIN)
+
+duplicated(testdata)
 
 
-# aggregate data from record to person
-library(plyr)
-
+# Create variable for entry and exit into the labor force. 
 testdata2 <- ddply(testdata, "id_2015", summarise, first_year = min(JAAR))  # summarise function aggregates data frame by "id_2015"
 testdata3 <- ddply(testdata, "id_2015", summarise, last_year = max(JAAR))
 # user  system elapsed 
@@ -77,33 +88,6 @@ head(testdata5)
 
 testdata6 <- ddply(testdata, c("id_2015", "FUNGRP"), summarise, last_year = max(JAAR))  # FUNGRP is used for MIRROR, a model for labour market estimates. Most likely the best variable to use to determine if someone is a teacher. 
 head(testdata6)
-
-### to do: als ik de dataset 'summarise' op FUNGRP, BRIN, GESLACHT en GEBDAT (opgesplitst per JAAR), hoe veel dubbele id_2015 heb ik dan? 
-testdata7 <- ddply(testdata, c("BRIN", "GEBDAT", "GESLACHT", "FUNGRP"), summarise, n_rec = max(id_2015))
-testdata8 <- ddply(testdata, c("BRIN", "GEBDAT", "GESLACHT", "FUNGRP"), summarise, n_rec = min(id_2015))
-testdata9 <- testdata8$n_rec - testdata7$n_rec
-
-head(testdata9)
-count(testdata9)
-
-(max(id_2015)-min(id_2015)+1)
-
-# ... function(x) replace(x, x %in% missing_FUNGRP, ... 
-
-
-
-sum(is.na(testdata2$id_2015))
-
-aggdata <- aggregate(data, by=list('BRIN'), FUN=is.na, na.rm=FALSE) # na.rm=FALSE is default, maar voor de duidelijkheid toegevoegd aan de formule. 
-
-attach(mtcars)
-aggdata <-aggregate(mtcars$mpg, by=list(cyl,vs), FUN=mean, na.rm=F)
-print(aggdata)
-
-is.na.data.frame(mtcars)
-
-mtcars$mpg[1]<-NA
-
 
 
 # To do: 
