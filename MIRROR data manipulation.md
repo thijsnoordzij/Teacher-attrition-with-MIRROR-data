@@ -1,88 +1,142 @@
-# Open MIRROR-file from SPSS .sav file extension
+---
+title: "MIRROR data manipulation"
+author: "Thijs Noordzij"
+date: "5 mei 2016"
+output: word_document
+---
 
-# haven package is faster than foreign package, and without error message. 
-# Variable labels are stored in the "label" attribute of each variable.
+# Open MIRROR-file from SPSS .sav file extension
+## Require haven package
+Haven package is faster than foreign package, and without error message. Variable labels are stored in the "label" attribute of each variable.
+
+```{r}
 if (require("haven")){
   print("haven is loaded correctly")
 } else {
   print("trying to install haven")
   install.packages("haven")
-  if(require("haven")){
+  if (require("haven")){
     print("haven installed and loaded")
   } else {
     stop("could not install haven")
   }
 }
+```
+  
+## Load data
+It takes almost 1 minute to load the data. 
 
-# It takes almost 1 minute to load the data
-# system.time: 
-# user  system elapsed 
-# 40.72    0.33   41.08 
+```{r}
 data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.sav")
-testdata <- data[1:50001,]
+```
+The output of system.time() of previous code section:
 
-# Basic descriptives
-library(Hmisc)
-describe(data$FCAT[data$JAAR==2000], exclude.missing = F) 
-
-# Define NA in FUNGRP(_PVE1), BRIN, GEBDAT, GESLACHT
-missing_FUNGRP <- c(-1) # NA defined as in SPSS file for MIRROR provided by DUO. FUNGRP also has 2431 system.missings in SPSS
+|user|system|elapsed|
+|-|-|-|
+|40.72|0.33|41.08|
+  
+# Recoding missing values correctly
+## Define NA in FUNGRP(_PVE1), BRIN, GEBDAT, GESLACHT
+### FUNGRP
+NA defined as in SPSS file for MIRROR provided by DUO. FUNGRP also has 2431 system.missings in SPSS. 
+```{r}
+missing_FUNGRP <- c(-1)
 data$FUNGRP <- lapply(data$FUNGRP, function(x) replace(x, x %in% missing_FUNGRP, NA))
 data$FUNGRP <- as.numeric(data$FUNGRP)
-# user  system elapsed 
-# 29.65    0.13   29.92 
+```
 
-missing_FUNGRP_PVE1 <- c(-1) # NA defined as in SPSS file for MIRROR provided by DUO. FUNGRP also has 2869 system.missings in SPSS
+The output of system.time() of previous code section:
+
+|user|system|elapsed 
+|-|-|-|
+|29.65|0.13|29.92|
+
+  
+### FUNGRP_PVE
+NA defined as in SPSS file for MIRROR provided by DUO. FUNGRP also has 2869 system.missings in SPSS. 
+```{r}
+missing_FUNGRP_PVE1 <- c(-1)
 data$FUNGRP_PVE1 <- lapply(data$FUNGRP_PVE1, function(x) replace(x, x %in% missing_FUNGRP_PVE1, NA))
 data$FUNGRP_PVE1 <- as.numeric(data$FUNGRP_PVE1)
-
-compare_FUNGRP_FUNGRP_PVE1 <- table(data$FUNGRP, data$FUNGRP_PVE1, exclude = NULL)
-write.csv2(compare_FUNGRP_FUNGRP_PVE1, file = "C:/Users/Thijs/Documents/MIRROR/Output/compare_FUNGRP_FUNGRP_PVE1.csv")
-# Value labels are still missing. 
-
-missing_BRIN <- c("O") # NA defined as in SPSS file for MIRROR provided by DUO.
-# missing_BRIN2 <- c("O", "VMB", "0000", "P&O", "PR", "SB O", "STAF", "TEAM") # Several unlikely BRIN, possible NA. With deeper search, likely to find more incorrect BRIN that are actually NA. 
+```
+  
+### BRIN
+NA defined as in SPSS file for MIRROR provided by DUO.
+```{r}
+missing_BRIN <- c("O") 
 data$BRIN <- lapply(data$BRIN, function(x) replace(x, x %in% missing_BRIN, NA))
-# user  system elapsed 
-# 30.81    0.02   30.83 
+```
 
-missing_GEBDAT <- c(-1) # NA defined as in SPSS file for MIRROR provided by DUO.
+The output of system.time() of previous code section:
+
+|user|system|elapsed|
+|-|-|-|
+|30.81|0.02|30.83|
+
+There are many more unlikely, such as "O", "VMB", "0000", "P&O", "PR", "SB O", "STAF", "TEAM". In a [next section](#ValidateBRIN) this will be handled. 
+  
+### GEBDAT
+NA defined as in SPSS file for MIRROR provided by DUO.
+```{r}
+missing_GEBDAT <- c(-1) 
 data$GEBDAT <- lapply(data$GEBDAT, function(x) replace(x, x %in% missing_GEBDAT, NA))
-# user  system elapsed 
-# 54.51    0.11   54.81 
+```
 
-class(data$GEBDAT)
+The output of system.time() of previous code section:
 
-missing_GESLACHT <- c("", "O") # NA defined as in SPSS file for MIRROR provided by DUO, "" (empty string) added. 
+|user|system|elapsed|
+|-|-|-|
+|54.51|0.11|54.81|
+
+  
+### GESLACHT
+NA defined as in SPSS file for MIRROR provided by DUO, "" (empty string) added. 
+```{r}
+missing_GESLACHT <- c("", "O") 
 data$GESLACHT <- lapply(data$GESLACHT, function(x) replace(x, x %in% missing_GESLACHT, NA))
-# user  system elapsed 
-# 30.50    0.06   30.60 
+```
 
-sum(is.na(data$BRIN))         # 1393
-sum(is.na(data$GEBDAT))       # 4156
-sum(is.na(data$GESLACHT))     # 4059 (if " " is added as missing value, else 0)
-sum(is.na(data$FUNGRP))       # 10559, that includes 2431 system.missing in SPSS
-sum(is.na(data$FUNGRP_PVE1))  # 9067, that includes 2869 system.missing in SPSS
+The output of system.time() of previous code section:
+
+|user|system|elapsed|
+|-|-|-|
+|30.50|0.06|30.60|
+
+## Total missing values per variable
+```{r}
+sum(is.na(data$BRIN))
+sum(is.na(data$GEBDAT))
+sum(is.na(data$GESLACHT))
+sum(is.na(data$FUNGRP))
+sum(is.na(data$FUNGRP_PVE1))
+```
+
+|variable|missing values|comments|
+|-|-|-|
+|BRIN|1393|-|
+|GEBDAT|4156|-|
+|GESLACHT|4059|if " " is added as missing value, else 0|
+|FUNGRP|10559|that includes 2431 system.missing in SPSS|
+|FUNGRP_PVE1|9067|that includes 2869 system.missing in SPSS|
 
 
-# Validate BRIN
-# 
-# BRIN is a unique identifier for a school. BRIN has a standard format: 4 
-# characters, number, number, character, character (e.g. "11AO"). Some BRIN in 
-# the MIRROR-file do not represent the school where the staff (teacher or 
-# otherwise) works. These 'BRIN' represent staff working under direct 
-# responsibility of the board. These BRIN have a free format, which deviates 
-# from the previously mentioned standard format. Possibly, these BRIN are also 
-# not identical for the same school in different years.
-# 
-# valid.brin is a function that identifies (in)correct values for BRIN. This
-# function is used to make a new variable in the data of the MIRROR-file
-# (data$validbrin). valid.brin is sourced from a separate file.
+## Validate BRIN {#ValidateBRIN}
+BRIN is a unique identifier for a school. BRIN has a standard format: 4 characters, number, number, character, character (e.g. "11AO"). Some BRIN in the MIRROR-file do not represent the school where the staff (teacher or otherwise) works. These 'BRIN' represent staff working under direct responsibility of the board. These BRIN have a free format, which deviates from the previously mentioned standard format. Possibly, these BRIN are also not identical for the same school in different years.
+
+valid.brin is a function that identifies (in)correct values for BRIN. This function is used to make a new variable in the data of the MIRROR-file (data$validbrin). valid.brin is sourced from a separate file. 
+
+```{r}
 source('E:/Google Drive/Promotie/Analyse/Teacher-attrition-with-MIRROR-data/validBRIN.R')
 data$validbrin <- lapply(data$BRIN, valid.brin) # the funtion works, but it takes ca. 35 minutes to complete the operation. 
 data$validbrin <- as.logical(data$validbrin)
+```
+The validBRIN funtion works, but it takes ca. 35 minutes to complete the operation.
 
-length(data$validbrin[data$validbrin==FALSE]) # 43636 invalid BRIN. 
+```{r}
+length(data$validbrin[data$validbrin==FALSE])
+```
+
+43636 invalid BRIN, which includes the 1393 missing values. 
 
 -# To do: check if/how incorrect BRIN are related to other variables
 data_invalidbrin <- subset(data, validbrin==FALSE)
@@ -128,6 +182,10 @@ invalidbrin_FUNGRP + geom_histogram(stat = "count", binwidth = 1, bins = NULL)
 # count(data[!y,], vars = c('BESTUUR1'))
 # sum(data$FUNGRP[data$validbrin==FALSE][data$FUNGRP==1])
 # data$FUNGRP[data$FUNGRP==1][data$validbrin==FALSE]
+
+compare_FUNGRP_FUNGRP_PVE1 <- table(data$FUNGRP, data$FUNGRP_PVE1, exclude = NULL)
+write.csv2(compare_FUNGRP_FUNGRP_PVE1, file = "C:/Users/Thijs/Documents/MIRROR/Output/compare_FUNGRP_FUNGRP_PVE1.csv")
+# Value labels are still missing. 
 
 
 # Duplicate records
@@ -199,3 +257,30 @@ data$FUNGRP_PVE1 <- factor(data$FUNGRP_PVE1,
 # 3. Create date variable out of GEBDAT
 
 # 4. Fill missing GEBDAT is known within same id_2015? Maybe not: id_2015 might not be very reliable if date of birth is missing.
+
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.

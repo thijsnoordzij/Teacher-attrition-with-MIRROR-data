@@ -1,25 +1,44 @@
-# Open MIRROR-file from SPSS .sav file extension
+---
+title: "MIRROR data manipulation"
+author: "Thijs Noordzij"
+date: "5 mei 2016"
+output: html_document
+---
 
-# haven package is faster than foreign package, and without error message. 
-# Variable labels are stored in the "label" attribute of each variable.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Open MIRROR-file from SPSS .sav file extension
+## Require haven package
+Haven package is faster than foreign package, and without error message. Variable labels are stored in the "label" attribute of each variable.
+
+```{r}
 if (require("haven")){
   print("haven is loaded correctly")
 } else {
   print("trying to install haven")
   install.packages("haven")
-  if(require("haven")){
+  if (require("haven")){
     print("haven installed and loaded")
   } else {
     stop("could not install haven")
   }
 }
+```
 
-# It takes almost 1 minute to load the data
-# system.time: 
-# user  system elapsed 
-# 40.72    0.33   41.08 
+## Load data
+It takes almost 1 minute to load the data. 
+
+system.time: 
+|user |system|elapsed|
+|-----|------|-------|
+|40.72|0.33  |41.08  |
+
+```{r}
 data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.sav")
 testdata <- data[1:50001,]
+```
 
 # Basic descriptives
 library(Hmisc)
@@ -199,3 +218,27 @@ data$FUNGRP_PVE1 <- factor(data$FUNGRP_PVE1,
 # 3. Create date variable out of GEBDAT
 
 # 4. Fill missing GEBDAT is known within same id_2015? Maybe not: id_2015 might not be very reliable if date of birth is missing.
+
+
+
+
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
