@@ -1,13 +1,13 @@
 ---
 title: "MIRROR data manipulation"
 author: "Thijs Noordzij"
-date: "5 mei 2016"
+date: "19 mei 2016"
 output: word_document
 ---
 
 # Open MIRROR-file from SPSS .sav file extension
 ## Require haven package
-Haven package is faster than foreign package, and without error message. Variable labels are stored in the "label" attribute of each variable.
+Haven package is faster than foreign package, and loads the data without error messages. Variable labels are stored in the "label" attribute of each variable.
 
 ```{r}
 if (require("haven")){
@@ -30,14 +30,18 @@ It takes almost 1 minute to load the data.
 data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.sav")
 ```
 The output of system.time() of previous code section:
-
+ 
 |user|system|elapsed|
 |-|-|-|
 |40.72|0.33|41.08|
-  
+
+
 # Recoding missing values correctly
+
 ## Define NA in FUNGRP(_PVE1), BRIN, GEBDAT, GESLACHT
+
 ### FUNGRP
+
 NA defined as in SPSS file for MIRROR provided by DUO. FUNGRP also has 2431 system.missings in SPSS. 
 ```{r}
 missing_FUNGRP <- c(-1)
@@ -58,6 +62,14 @@ NA defined as in SPSS file for MIRROR provided by DUO. FUNGRP also has 2869 syst
 missing_FUNGRP_PVE1 <- c(-1)
 data$FUNGRP_PVE1 <- lapply(data$FUNGRP_PVE1, function(x) replace(x, x %in% missing_FUNGRP_PVE1, NA))
 data$FUNGRP_PVE1 <- as.numeric(data$FUNGRP_PVE1)
+```
+  
+### FUNGRP_FMIX1
+NA defined as in SPSS file for MIRROR provided by DUO, and "-2" added. FUNGRP also has 8424 system.missings in SPSS. 
+```{r}
+missing_FUNGRP_FMIX1 <- c(-1, -2)
+data$FUNGRP_FMIX1 <- lapply(data$FUNGRP_FMIX1, function(x) replace(x, x %in% missing_FUNGRP_FMIX1, NA))
+data$FUNGRP_FMIX1 <- as.numeric(data$FUNGRP_FMIX1)
 ```
   
 ### BRIN
@@ -109,16 +121,17 @@ sum(is.na(data$GEBDAT))
 sum(is.na(data$GESLACHT))
 sum(is.na(data$FUNGRP))
 sum(is.na(data$FUNGRP_PVE1))
+sum(is.na(data$FUNGRP_FMIX1[data$JAAR >= 2002]))
 ```
 
 |variable|missing values|comments|
 |-|-|-|
-|BRIN|1393|-|
-|GEBDAT|4156|-|
+|BRIN|1393||
+|GEBDAT|4156||
 |GESLACHT|4059|if " " is added as missing value, else 0|
 |FUNGRP|10559|that includes 2431 system.missing in SPSS|
 |FUNGRP_PVE1|9067|that includes 2869 system.missing in SPSS|
-
+|FUNGRP_FMIX1|8424|number of NA in JAAR >= 2002. In JAAR < 2002 all values are NA|
 
 ## Validate BRIN {#ValidateBRIN}
 BRIN is a unique identifier for a school. BRIN has a standard format: 4 characters, number, number, character, character (e.g. "11AO"). Some BRIN in the MIRROR-file do not represent the school where the staff (teacher or otherwise) works. These 'BRIN' represent staff working under direct responsibility of the board. These BRIN have a free format, which deviates from the previously mentioned standard format. Possibly, these BRIN are also not identical for the same school in different years.
@@ -127,75 +140,90 @@ valid.brin is a function that identifies (in)correct values for BRIN. This funct
 
 ```{r}
 source('E:/Google Drive/Promotie/Analyse/Teacher-attrition-with-MIRROR-data/validBRIN.R')
-data$validbrin <- lapply(data$BRIN, valid.brin) # the funtion works, but it takes ca. 35 minutes to complete the operation. 
+data$validbrin <- lapply(data$BRIN, valid.brin)
 data$validbrin <- as.logical(data$validbrin)
 ```
 The validBRIN funtion works, but it takes ca. 35 minutes to complete the operation.
 
+## Valid BRIN in complete dataset
 ```{r}
-length(data$validbrin[data$validbrin==FALSE])
+mytable <- table(data$validbrin, exclude = NULL)
+mytable
+prop.table(mytable)
 ```
 
-43636 invalid BRIN, which includes the 1393 missing values. 
+||FALSE|TRUE|NA|
+|-|-|-|-|
+|n|42243|6407015|1393|
+|proportion|0.0065486414|0.9932354114|0.0002159472|
 
--# To do: check if/how incorrect BRIN are related to other variables
-data_invalidbrin <- subset(data, validbrin==FALSE)
-table(data$validbrin, exclude = NULL)
-# FALSE    TRUE    <NA> 
-#   43636 6407015       0 
 
-BRIN_FUNGRP_table <- table(data$validbrin, data$FUNGRP_PVE1, exclude = NULL)
-BRIN_FUNGRP_prop.table <- prop.table(table(data$validbrin, data$FUNGRP_PVE1, exclude = NULL), 1)
-write.csv2(BRIN_FUNGRP_table, file = "C:/Users/Thijs/Documents/MIRROR/Output/BRIN_FUNGRP_table.csv")
-write.csv2(BRIN_FUNGRP_prop.table, file = "C:/Users/Thijs/Documents/MIRROR/Output/BRIN_FUNGRP_prop.table.csv")
-barplot(BRIN_FUNGRP_prop.table, main = "Proportion of valid BRIN per job", xlab = "Job", legend = c("invalid BRIN", "valid BRIN"), col=c("red","darkgreen"), beside = TRUE)
+## Valid BRIN per year
+Invalid BRIN appear in 2008 and later years. The remain a small percentage of all observations, max 2%. In the following checks, only records of 2008 and later will be used. 
 
-head(data$FUNGRP_PVE1)
-
-mytable <- table(data_invalidbrin$JAAR, data_invalidbrin$FUNGRP_PVE1, exclude=NULL)
+```{r}
+mytable <- table(data$JAAR, data$validbrin, exclude = NULL)
 mytable
+prop.table(mytable,1)
+```
 
-mytable <- table(data$JAAR, data$FUNGRP_PVE1, exclude=NULL)
+## Valid BRIN per job (FUNGRP_PVE1 and FUNGRP_FMIX1)
+Invalid BRIN are concentrated in non-teaching jobs, but are <5% of these records. For teachers, >99% of the records have a valid BRIN. This is checked for two different variables for job, with very similar results.  
+
+```{r}
+# FUNGRP_PVE1
+mytable1 <- table(data$FUNGRP_PVE1[data$JAAR >= 2008], data$validbrin[data$JAAR >= 2008], exclude = NULL)
+rownames(mytable1)<-c("Directie", "OP", "OOP", "OBP", "LIO", "<NA>")
+mytable1
+prop.table(mytable1,1)
+
+# FUNGRP_FMIX1
+mytable2 <- table(data$FUNGRP_FMIX1[data$JAAR >= 2008], data$validbrin[data$JAAR >= 2008], exclude = NULL)
+rownames(mytable2)<-c("Directie", "OP", "OOP", "OBP", "LIO", "<NA>")
+mytable2
+prop.table(mytable2,1)
+
+prop.table(mytable1,1) - prop.table(mytable2,1)
+```
+
+# Potential problems with linking to other data
+To link the teachers of this dataset reliable to other data, some key variables have to be complete. In most cases these variables are enough to identify persons: year (JAAR), school (BRIN), date of birth (GEBDAT), sex (GESLACHT), job (FUNGRP_PVE1). If a record has a missing value in one (or more) of these records, it is considered weak. In many cases, job might not be necessary for a reliable link, so a check with and without FUNGRP_PVE1 is done. 
+
+13862 records (0.2%) have at least one missing value in the key variables necessary for linking, including the variable for job. If we exclude the variable for job, 5553 records (0.09%) with at least one missing key value remain. For further analysis in this paragraph, I use the more conservative estimate, which included the variable for job as source for potential problems with linking. 
+
+```{r}
+data$weaklink <- apply(data[, c("JAAR", "BRIN", "GEBDAT", "GESLACHT", "FUNGRP_PVE1")], 1, anyNA)
+sum(data$weaklink)
+sum(data$weaklink)/length(data$weaklink)
+data$weaklink2 <- apply(data[, c("JAAR", "BRIN", "GEBDAT", "GESLACHT")], 1, anyNA)
+sum(data$weaklink2)
+sum(data$weaklink2)/length(data$weaklink2)
+```
+
+## Relation between 'weak' records and years
+Records with at least one missing key value seem to concentrate in the years 2008 and later. 2010 has the most, but still only ca. 1,5% of the records of that year. 
+
+```{r}
+mytable <- table(data$JAAR, data$weaklink, exclude = NULL)
 mytable
 prop.table(mytable, 1)
+```
 
-class(data_invalidbrin$FUNGRP)
+## Relation between 'weak' records and invalid BRIN
+There seems to be no obvious link between the invalid BRIN and the missing key values. 86,7% of records with a missing key value have a valid BRIN and 3,2% have an invalid BRIN. The remaining 10% of the records with missing key values has a missing BRIN (<NA>), which makes sense because a missing BRIN is one of the criteria to mark a record as problematic. 
 
-sum(is.na(data_invalidbrin$FUNGRP))/length(data_invalidbrin$FUNGRP)
-
-complete.cases(data_invalidbrin$FUNGRP) # NA's a problem?
-
-getwd()
-tmp <- tempfile(fileext = ".sav")
-write.csv(data_invalidbrin, "C:/Users/Thijs/Documents/MIRROR/data/invalid_brin.csv")
-
-head(data_invalidbrin)
-
-# install.packages("ggplot2")
-library(ggplot2)
-invalidbrin_FUNGRP <- ggplot(data_invalidbrin, aes(FUNGRP))
-invalidbrin_FUNGRP + geom_histogram(stat = "count", binwidth = 1, bins = NULL)
-
-
-# data$FUNGRP[data$validbrin==FALSE]
-# count(data[,'JAAR'][!y])
-# count(data[!y,], vars = c('BESTUUR1'))
-# sum(data$FUNGRP[data$validbrin==FALSE][data$FUNGRP==1])
-# data$FUNGRP[data$FUNGRP==1][data$validbrin==FALSE]
-
-compare_FUNGRP_FUNGRP_PVE1 <- table(data$FUNGRP, data$FUNGRP_PVE1, exclude = NULL)
-write.csv2(compare_FUNGRP_FUNGRP_PVE1, file = "C:/Users/Thijs/Documents/MIRROR/Output/compare_FUNGRP_FUNGRP_PVE1.csv")
-# Value labels are still missing. 
-
+```{r}
+mytable <- table(data$validbrin, data$weaklink, exclude = NULL)
+mytable
+prop.table(mytable, 2)
+# mytable2 <- table(data$validbrin, data$weaklink)
+# mytable2
+# prop.table(mytable2, 2)
+```
 
 # Duplicate records
 library(plyr)
 
-data1 <- data[, c("id_2015", "JAAR", "BRIN", "BESTUUR1", "GEBDAT", "GESLACHT", "FUNGRP")]
-data1$koppelprobleem <- apply(data1, 1, anyNA)
-# user  system elapsed 
-# 20.10    0.26   20.38 
-sum(data1$koppelprobleem) # 18450 records have one or more NA's in variables used for linking to other data. 
 
 # check for persons (id_2015) with one or more recors with one or more NA's in variables used for linking to other data. 
 id_data <- ddply(data1, "id_2015", summarise, koppelprobleem_record = max(koppelprobleem))
