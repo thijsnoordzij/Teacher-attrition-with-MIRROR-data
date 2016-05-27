@@ -1,13 +1,15 @@
 ---
 title: "MIRROR data manipulation"
 author: "Thijs Noordzij"
-date: "19 mei 2016"
 output: word_document
 ---
 
 # Open MIRROR-file from SPSS .sav file extension
 ## Require haven package
 Haven package is faster than foreign package, and loads the data without error messages. Variable labels are stored in the "label" attribute of each variable.
+
+Hadley Wickham and Evan Miller (2015). haven: Import SPSS, Stata and SAS Files. R package version 0.2.0. https://CRAN.R-project.org/package=haven
+
 
 ```{r}
 if (require("haven")){
@@ -21,6 +23,7 @@ if (require("haven")){
     stop("could not install haven")
   }
 }
+citation("haven")
 ```
   
 ## Load data
@@ -49,7 +52,7 @@ data$FUNGRP <- lapply(data$FUNGRP, function(x) replace(x, x %in% missing_FUNGRP,
 data$FUNGRP <- as.numeric(data$FUNGRP)
 ```
 
-The output of system.time() of previous code section:
+The output of system.time() of previous section of code:
 
 |user|system|elapsed 
 |-|-|-|
@@ -79,7 +82,7 @@ missing_BRIN <- c("O")
 data$BRIN <- lapply(data$BRIN, function(x) replace(x, x %in% missing_BRIN, NA))
 ```
 
-The output of system.time() of previous code section:
+The output of system.time() of previous section of code:
 
 |user|system|elapsed|
 |-|-|-|
@@ -94,7 +97,7 @@ missing_GEBDAT <- c(-1)
 data$GEBDAT <- lapply(data$GEBDAT, function(x) replace(x, x %in% missing_GEBDAT, NA))
 ```
 
-The output of system.time() of previous code section:
+The output of system.time() of previous section of code:
 
 |user|system|elapsed|
 |-|-|-|
@@ -108,7 +111,7 @@ missing_GESLACHT <- c("", "O")
 data$GESLACHT <- lapply(data$GESLACHT, function(x) replace(x, x %in% missing_GESLACHT, NA))
 ```
 
-The output of system.time() of previous code section:
+The output of system.time() of previous section of code:
 
 |user|system|elapsed|
 |-|-|-|
@@ -159,7 +162,7 @@ prop.table(mytable)
 
 
 ## Valid BRIN per year
-Invalid BRIN appear in 2008 and later years. The remain a small percentage of all observations, max 2%. In the following checks, only records of 2008 and later will be used. 
+Invalid BRIN appear in 2008 and later years. It remains a small percentage of all observations, max 2%. In the following checks, only records of 2008 and later will be used. 
 
 ```{r}
 mytable <- table(data$JAAR, data$validbrin, exclude = NULL)
@@ -200,11 +203,30 @@ sum(data$weaklink2)
 sum(data$weaklink2)/length(data$weaklink2)
 ```
 
-## Relation between 'weak' records and years
+## Relation between 'weak' records and years {#weakyear}
 Records with at least one missing key value seem to concentrate in the years 2008 and later. 2010 has the most, but still only ca. 1,5% of the records of that year. 
 
 ```{r}
 mytable <- table(data$JAAR, data$weaklink, exclude = NULL)
+mytable
+prop.table(mytable, 1)
+```
+
+## Relation between 'weak' records and job
+A large proportion of the weak records have missing values for job: 9067 out of 13862 weak records (65%) have a missing value for the job variable. The records that don't have a missing value for job are almost never weak (<0,1%), with a slightly higher proportion of weak records (0,2%) with the teachers in training (LIO). 
+
+```{r}
+mytable <- table(data$FUNGRP_PVE1, data$weaklink, exclude = NULL)
+rownames(mytable)<-c("Directie", "OP", "OOP", "OBP", "LIO", "<NA>")
+mytable
+prop.table(mytable, 1)
+```
+
+The weak records in 2010 (2010 has the most weak records, [check here](#weakyear)) are also almost completely caused by a missing value for the job variable (and possibly also other missing values). 5959 out of the 6062 (98%) weak records in 2010 have a missing value for the job variable. 
+
+```{r}
+mytable <- table(data$FUNGRP_PVE1[data$JAAR==2010], data$weaklink[data$JAAR==2010], exclude = NULL)
+rownames(mytable)<-c("Directie", "OP", "OOP", "OBP", "LIO", "<NA>")
 mytable
 prop.table(mytable, 1)
 ```
@@ -221,22 +243,66 @@ prop.table(mytable, 2)
 # prop.table(mytable2, 2)
 ```
 
-# Duplicate records
+
+## check for persons (id_2015) with one or more records with one or more NA's in variables used for linking to other data. 
+### All records
+Although only 0,2% of the records has NA's in variables important for linking to other data, when the records are aggregated to the level of individuals, 2,1% of the persons has at least one weak record. 
+
+```{r}
 library(plyr)
+id_data <- ddply(data, "id_2015", summarise, weaklink_id = max(weaklink))
+sum(id_data$weaklink_id)
+length(id_data$weaklink_id)
+sum(id_data$weaklink_id)/length(id_data$weaklink_id)
+```
+
+For this analysis the plyr package is used, citation: 
+Hadley Wickham (2011). The Split-Apply-Combine Strategy for Data Analysis. Journal of Statistical Software, 40(1), 1-29. URL http://www.jstatsoft.org/v40/i01/.
 
 
-# check for persons (id_2015) with one or more recors with one or more NA's in variables used for linking to other data. 
-id_data <- ddply(data1, "id_2015", summarise, koppelprobleem_record = max(koppelprobleem))
-sum(id_data$koppelprobleem_record) # 16868 out of 629793 persons (2.68%)
+### Most recent year (2014)
+In 2014 the problem of weak records per person seem limited. 510 out of 332418 (0,15%) of the persons (id_2014) have one or more weak records. 
 
-# idem for most recent year (2014)
-id_data_2014 <- ddply(data1[data1$JAAR==2014,], "id_2015", summarise, koppelprobleem_record = max(koppelprobleem))
-sum(id_data_2014$koppelprobleem_record) # 505 out of 332418 persons (0,15%)
+```{r}
+id_data_2014 <- ddply(data[data$JAAR==2014,], "id_2015", summarise, weaklink_id = max(weaklink))
+sum(id_data_2014$weaklink_id)
+length(id_data_2014$weaklink_id)
+sum(id_data_2014$weaklink_id)/length(id_data_2014$weaklink_id)
+```
 
-# idem for most recent 6 years (2008 - 2014)
-id_data_20092014 <- ddply(subset(data1, JAAR >= 2008), "id_2015", summarise, koppelprobleem_record = max(koppelprobleem))
-sum(id_data_20092014$koppelprobleem_record) # 16759 out of 478643 persons (3,50%)
+### Most recent 6 years (2008 - 2014)
+13004 out of 478643 the persons in 2008-2014 (2,7%) have one or more weak records. 
 
+```{r}
+id_data_20082014 <- ddply(subset(data, JAAR >= 2008), "id_2015", summarise, weaklink_id = max(weaklink))
+sum(id_data_20082014$weaklink_id)
+length(id_data_20082014$weaklink_id)
+sum(id_data_20082014$weaklink_id)/length(id_data_20082014$weaklink_id)
+```
+
+```{r}
+Year <- NULL
+PersonsWeakRecords <- NULL
+TotalPersons <- NULL
+Proportion <- NULL
+
+for (i in min(data$JAAR):max(data$JAAR)) {
+  temp_id_data <- ddply(subset(data, JAAR == i), "id_2015", summarise, weaklink_id = max(weaklink))
+  a <- sum(temp_id_data$weaklink_id)
+  b <- length(temp_id_data$weaklink_id)
+  # a/b
+  # cat(i, a/b)
+  Year <- c(Year, i)
+  PersonsWeakRecords <- c(PersonsWeakRecords, a)
+  TotalPersons <- c(TotalPersons, b)
+  Proportion <- c(Proportion, a/b)
+}
+# Year
+# PersonsWeakRecords
+# TotalPersons
+# Proportion
+barplot(Proportion, names.arg = Year, ylab = "Proportion")
+```
 
 head(data1[which(data1$JAAR==(2009:2014)), ])
 head(data1[data1$JAAR==2014, ])
