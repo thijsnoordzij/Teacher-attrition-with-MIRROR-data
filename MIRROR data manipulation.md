@@ -1,6 +1,7 @@
 ---
 title: "MIRROR data manipulation"
 author: "Thijs Noordzij"
+date: "27 mei 2016"
 output: word_document
 ---
 
