@@ -14,7 +14,6 @@ if (require("haven")){
   }
 }
 
-# It takes almost 1 minute to load the data
 # system.time: 
 # user  system elapsed 
 # 40.72    0.33   41.08 
