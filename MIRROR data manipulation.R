@@ -14,7 +14,6 @@ if (require("haven")){
   }
 }
 
-# It takes almost 1 minute to load the data
 # system.time: 
 # user  system elapsed 
 # 40.72    0.33   41.08 
@@ -197,5 +196,12 @@ data$FUNGRP_PVE1 <- factor(data$FUNGRP_PVE1,
 # 2. Convert some variables to nominal variables (factor?)
 
 # 3. Create date variable out of GEBDAT
+
+# convert string date variable to date
+data$GEBDATdate <- sapply(data$GEBDAT, function(x) as.Date(toString(x), format = "%Y%m%d"))
+class(data$GEBDATdate) <- "Date"
+
+# user  system elapsed 
+# 213.00    0.07  213.45 
 
 # 4. Fill missing GEBDAT is known within same id_2015? Maybe not: id_2015 might not be very reliable if date of birth is missing.
