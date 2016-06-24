@@ -1,8 +1,8 @@
 ---
 title: "MIRROR data manipulation"
 author: "Thijs Noordzij"
-date: "27 mei 2016"
-output: word_document
+date: "22 juni 2016"
+output: html_document
 ---
 
 # Open MIRROR-file from SPSS .sav file extension
@@ -13,17 +13,11 @@ Hadley Wickham and Evan Miller (2015). haven: Import SPSS, Stata and SAS Files. 
 
 
 ```{r}
-if (require("haven")){
-  print("haven is loaded correctly")
-} else {
-  print("trying to install haven")
+if (!require("haven")){
   install.packages("haven")
-  if (require("haven")){
-    print("haven installed and loaded")
-  } else {
-    stop("could not install haven")
-  }
+  require("haven")
 }
+
 citation("haven")
 ```
   
@@ -190,6 +184,35 @@ prop.table(mytable2,1)
 prop.table(mytable1,1) - prop.table(mytable2,1)
 ```
 
+# Date variables
+## convert numeric date variable to date
+The GEBDAT variable in the MIRROR-file is a numeric variable. The first 4 characters represent year, the next 2 month, and the final 2 day. To convert this to a date variable, the numeric variable has to be converted to a string, which in turn can be converted to a date variable. 
+
+```{r}
+data$GEBDATdate <- sapply(data$GEBDAT, function(x) as.Date(toString(x), format = "%Y%m%d"))
+class(data$GEBDATdate) <- "Date"
+```
+
+|user|system|elapsed|
+|-|-|-|
+|202.12|0.00|202.22|
+
+## Create variable for reference date (Peildatum)
+The JAAR variable contains the year of the record. The reference date is always the 1st of October. 
+
+```{r}
+data$refdate <- sapply(data$JAAR, function(x) as.Date(paste0(toString(x), "10", "01"), format = "%Y%m%d"))
+class(data$refdate) <- "Date"
+```
+
+## Create variable for age at reference date
+The function "age_years", developed by nzcoops (http://www.r-bloggers.com/updated-age-calculation-function/) is used to calculate the age of a person at the reference moment. 
+
+```{r}
+source('E:/Google Drive/Promotie/Analyse/Teacher-attrition-with-MIRROR-data/age calculation function.R')
+data$age <- age_years(data$GEBDATdate, data$refdate)
+```
+
 # Potential problems with linking to other data
 To link the teachers of this dataset reliable to other data, some key variables have to be complete. In most cases these variables are enough to identify persons: year (JAAR), school (BRIN), date of birth (GEBDAT), sex (GESLACHT), job (FUNGRP_PVE1). If a record has a missing value in one (or more) of these records, it is considered weak. In many cases, job might not be necessary for a reliable link, so a check with and without FUNGRP_PVE1 is done. 
 
@@ -250,29 +273,26 @@ prop.table(mytable, 2)
 Although only 0,2% of the records has NA's in variables important for linking to other data, when the records are aggregated to the level of individuals, 2,1% of the persons has at least one weak record. 
 
 ```{r}
-library(plyr)
-id_data <- ddply(data, "id_2015", summarise, weaklink_id = max(weaklink))
+if (!require("dplyr")){
+  install.packages("dplyr")
+  require("dplyr")
+citation("dplyr")
+}
+
+id_data <- data %>% 
+  group_by(id_2015) %>% 
+  summarise(weaklink_id = TRUE %in% weaklink)
+
 sum(id_data$weaklink_id)
 length(id_data$weaklink_id)
 sum(id_data$weaklink_id)/length(id_data$weaklink_id)
 ```
 
-For this analysis the plyr package is used, citation: 
-Hadley Wickham (2011). The Split-Apply-Combine Strategy for Data Analysis. Journal of Statistical Software, 40(1), 1-29. URL http://www.jstatsoft.org/v40/i01/.
+For this analysis the dplyr package is used, citation: 
+Hadley Wickham and Romain Francois (2015). dplyr: A Grammar of Data Manipulation. R package version 0.4.3. https://CRAN.R-project.org/package=dplyr
 
-
-### Most recent year (2014)
-In 2014 the problem of weak records per person seem limited. 510 out of 332418 (0,15%) of the persons (id_2014) have one or more weak records. 
-
-```{r}
-id_data_2014 <- ddply(data[data$JAAR==2014,], "id_2015", summarise, weaklink_id = max(weaklink))
-sum(id_data_2014$weaklink_id)
-length(id_data_2014$weaklink_id)
-sum(id_data_2014$weaklink_id)/length(id_data_2014$weaklink_id)
-```
-
-### Most recent 6 years (2008 - 2014)
-13004 out of 478643 the persons in 2008-2014 (2,7%) have one or more weak records. 
+### Proportion of people with weak records per year 
+In 2014 the problem of weak records per person seem limited. 510 out of 332418 (0,15%) of the persons (id_2014) have one or more weak records. In a longer period of time (2008-2014) 13004 out of 478643 the persons (2,7%) have one or more weak records. 
 
 ```{r}
 id_data_20082014 <- ddply(subset(data, JAAR >= 2008), "id_2015", summarise, weaklink_id = max(weaklink))
@@ -281,6 +301,8 @@ length(id_data_20082014$weaklink_id)
 sum(id_data_20082014$weaklink_id)/length(id_data_20082014$weaklink_id)
 ```
 
+Checking the proportion of weak records per person per year, we see the emergence of weak records starting in 2008. The years with the most persons with weak records are 2008 (1,0%) and 2010 (1,5%), less than 0,5% of the persons in all other years have weak records. 
+
 ```{r}
 Year <- NULL
 PersonsWeakRecords <- NULL
@@ -288,49 +310,122 @@ TotalPersons <- NULL
 Proportion <- NULL
 
 for (i in min(data$JAAR):max(data$JAAR)) {
-  temp_id_data <- ddply(subset(data, JAAR == i), "id_2015", summarise, weaklink_id = max(weaklink))
+  temp_id_data <- data %>% 
+    filter(JAAR == i) %>% 
+    group_by(id_2015) %>%
+    summarise(weaklink_id = TRUE %in% weaklink)
   a <- sum(temp_id_data$weaklink_id)
   b <- length(temp_id_data$weaklink_id)
-  # a/b
-  # cat(i, a/b)
   Year <- c(Year, i)
   PersonsWeakRecords <- c(PersonsWeakRecords, a)
   TotalPersons <- c(TotalPersons, b)
   Proportion <- c(Proportion, a/b)
 }
-# Year
-# PersonsWeakRecords
-# TotalPersons
-# Proportion
+
+rm(a); rm(b); rm(i); rm(temp_id_data)
+```
+
+System.time for the previous section of code: 
+   user  system elapsed 
+ 173.53    0.62  174.28 
+
+```{r, Proportion of persons with weak records per year, echo=FALSE}
 barplot(Proportion, names.arg = Year, ylab = "Proportion")
 ```
 
-head(data1[which(data1$JAAR==(2009:2014)), ])
-head(data1[data1$JAAR==2014, ])
-head(subset(data1, JAAR >= 2008))
-
-
-min(c(T,T,F))
-
-duplicated(testdata)
-
-
 # Create variable for entry and exit into the labor force. 
-testdata2 <- ddply(testdata, "id_2015", summarise, first_year = min(JAAR))  # summarise function aggregates data frame by "id_2015"
-testdata3 <- ddply(testdata, "id_2015", summarise, last_year = max(JAAR))
-# user  system elapsed 
-# 2.52    0.03    2.55 
+Constructing a dataframe with aggregated data on level of persons (id_2015), making use of the dplyr package. 
 
-testdata4 <- merge(testdata2, testdata3)
-testdata5 <- merge(testdata, testdata4)
+```{r}
+if (!require("dplyr")){
+  install.packages("dplyr")
+  require("dplyr")
+}
+citation("dplyr")
+```
+Hadley Wickham and Romain Francois (2015). dplyr: A Grammar of Data Manipulation. R package version 0.4.3. https://CRAN.R-project.org/package=dplyr
 
-head(testdata2)
-head(testdata3)
-head(testdata4)
-head(testdata5)
+The following code aggregates all contracts for teachers (FUNGRP_PVE1 == 2) in a dataframe with one record for every teacher. It takes approximately 8 minutes to run. 
 
-testdata6 <- ddply(testdata, c("id_2015", "FUNGRP"), summarise, last_year = max(JAAR))  # FUNGRP is used for MIRROR, a model for labour market estimates. Most likely the best variable to use to determine if someone is a teacher. 
-head(testdata6)
+```{r}
+id_data <- data %>% 
+  filter(REGFORM == 1) %>%
+  filter(2 %in% FUNGRP_PVE1) %>%
+  group_by(id_2015) %>% 
+  summarise(
+    min_year = min(JAAR, na.rm = TRUE), 
+    max_year = max(JAAR, na.rm = TRUE), 
+    total_years = max(JAAR, na.rm = TRUE) - min(JAAR, na.rm = TRUE), 
+    age_in = min(age, na.rm = TRUE), 
+    age_out = max(age, na.rm = TRUE) 
+)
+```
+
+The following code aggregates all contracts per person per year in a dataframe. The dataframe includes a variable for age in that year and dummy variables for weak link, sector of the contract (SECDJV), management (FUNGRP_PVE1 == 1), teacher (FUNGRP_PVE1 == 2), educational support staff (FUNGRP_PVE1 == 3), facility support staff (FUNGRP_PVE1 == 4) and teacher in training (LIO) (FUNGRP == 5). It takes approximately 30 minutes to run. 
+
+```{r}
+id_data_year <- data %>% 
+  filter(REGFORM == 1) %>%
+  group_by(id_2015, JAAR) %>% 
+  summarise(
+    weaklink_id = TRUE %in% weaklink, 
+    age_year=max(age, na.rm = TRUE), 
+    WPO = "WPO" %in% SECDJV, 
+    WVO = "WVO" %in% SECDJV, 
+    WEB = "WEB" %in% SECDJV, 
+    AOC = "AOC" %in% SECDJV, 
+    management = 1 %in% FUNGRP_PVE1, 
+    teacher = 2 %in% FUNGRP_PVE1, 
+    support = 3 %in% FUNGRP_PVE1, 
+    facility = 4 %in% FUNGRP_PVE1, 
+    LIO = 5 %in% FUNGRP_PVE1
+  )
+```
+
+Merge the two dataframes to get one dataframe with persons per year, with variables for first and last year of each person in the dataset. 
+```{r}
+id_data_year <- merge(id_data_year, id_data, all = TRUE)
+```
+
+
+Plotting age distribution per year of population of teachers, of leaving teachers, and of entering teachers (sector VO). 
+```{r}
+par(mfrow=c(4,6))
+
+for (i in c(1998, 2003, 2008, 2013)){
+  age_total <- id_data_year$age_year[id_data_year$JAAR == i]
+  age_exit <- id_data_year$age_year[id_data_year$JAAR == i & id_data_year$max_year == i & id_data_year$WVO == TRUE & id_data_year$teacher == TRUE]
+  age_entry <- id_data_year$age_year[id_data_year$JAAR == i & id_data_year$min_year == i & id_data_year$WVO == TRUE & id_data_year$teacher == TRUE]
+
+  hist(age_total, ylim = c(0,12000), main = paste("Age of teachers in", i), xlab = "Age", breaks = min(id_data_year$age_year[id_data_year$JAAR == i], na.rm = TRUE):max(id_data_year$age_year[id_data_year$JAAR == i], na.rm = TRUE))
+  hist(age_exit, ylim = c(0,700), main = paste("Age of teachers leaving the profession after", i), xlab = "Age", breaks = min(age_exit, na.rm = TRUE):max(age_exit, na.rm = TRUE))
+  hist(age_entry, ylim = c(0,500), main = paste("Age of teachers entering the profession in", i), xlab = "Age", breaks = min(age_entry, na.rm = TRUE):max(age_entry, na.rm = TRUE))
+
+freq_age_total <- as.data.frame(table(age_total))
+names(freq_age_total)[names(freq_age_total) == 'age_total'] <- 'Age'
+names(freq_age_total)[names(freq_age_total) == 'Freq'] <- 'Freq_total'
+
+freq_age_exit <- as.data.frame(table(age_exit))
+names(freq_age_exit)[names(freq_age_exit) == 'age_exit'] <- 'Age'
+names(freq_age_exit)[names(freq_age_exit) == 'Freq'] <- 'Freq_out'
+
+freq_age_entry <- as.data.frame(table(age_entry))
+names(freq_age_entry)[names(freq_age_entry) == 'age_entry'] <- 'Age'
+names(freq_age_entry)[names(freq_age_entry) == 'Freq'] <- 'Freq_in'
+
+mobility <- merge(freq_age_total, (merge(freq_age_exit, freq_age_entry)))
+mobility$prop_out <- mobility$Freq_out / mobility$Freq_total
+mobility$prop_in <- mobility$Freq_in / mobility$Freq_total
+
+plot(mobility$Age, ylim = c(0, 0.25), mobility$prop_out, main = paste("Proportion of population of teachers that leave the profession, per age, in", i), ylab = "Proportion", xlab = "Age")
+plot(mobility$Age, ylim = c(0, 0.05), xlim = c(0,20), mobility$prop_out, main = paste("Proportion of population of teachers that leave the profession, per age (<30), in", i), ylab = "Proportion", xlab = "Age")
+plot(mobility$Age, ylim = c(0, 0.13), mobility$prop_in, main = paste("Proportion of population of teachers  that enter the profession, per age, in", i), ylab = "Proportion", xlab = "Age")
+
+write.csv2(mobility, paste0("E:/Google Drive/Promotie/Analyse/mobility", i, ".csv"))
+
+}
+
+```
 
 
 # To do: 
@@ -347,35 +442,3 @@ data$FUNGRP_PVE1 <- factor(data$FUNGRP_PVE1,
 #   labels = c("directie/management", "OP", "OOP", "OBP", "LIO"))
 
 
-# 2. Convert some variables to nominal variables (factor?)
-
-# 3. Create date variable out of GEBDAT
-
-# 4. Fill missing GEBDAT is known within same id_2015? Maybe not: id_2015 might not be very reliable if date of birth is missing.
-
-
-
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-
-## R Markdown
-
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
-```
-
-## Including Plots
-
-You can also embed plots, for example:
-
-```{r pressure, echo=FALSE}
-plot(pressure)
-```
-
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
