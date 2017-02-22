@@ -1,7 +1,7 @@
 ---
 title: "MIRROR data manipulation"
 author: "Thijs Noordzij"
-date: "22 juni 2016"
+date: "05 november 2016"
 output: html_document
 ---
 
@@ -75,6 +75,7 @@ NA defined as in SPSS file for MIRROR provided by DUO.
 ```{r}
 missing_BRIN <- c("O") 
 data$BRIN <- lapply(data$BRIN, function(x) replace(x, x %in% missing_BRIN, NA))
+data$BRIN <- as.character(data$BRIN)
 ```
 
 The output of system.time() of previous section of code:
@@ -138,10 +139,10 @@ valid.brin is a function that identifies (in)correct values for BRIN. This funct
 
 ```{r}
 source('E:/Google Drive/Promotie/Analyse/Teacher-attrition-with-MIRROR-data/validBRIN.R')
-data$validbrin <- lapply(data$BRIN, valid.brin)
-data$validbrin <- as.logical(data$validbrin)
+data$validbrin <- sapply(data$BRIN, valid.brin)
 ```
 The validBRIN funtion works, but it takes ca. 35 minutes to complete the operation.
+
 
 ## Valid BRIN in complete dataset
 ```{r}
@@ -268,7 +269,7 @@ prop.table(mytable, 2)
 ```
 
 
-## check for persons (id_2015) with one or more records with one or more NA's in variables used for linking to other data. 
+## constructing file on level of unique persons. Check for persons (id_2015) with one or more records with one or more NA's in variables used for linking to other data. 
 ### All records
 Although only 0,2% of the records has NA's in variables important for linking to other data, when the records are aggregated to the level of individuals, 2,1% of the persons has at least one weak record. 
 
@@ -276,7 +277,6 @@ Although only 0,2% of the records has NA's in variables important for linking to
 if (!require("dplyr")){
   install.packages("dplyr")
   require("dplyr")
-citation("dplyr")
 }
 
 id_data <- data %>% 
@@ -334,7 +334,7 @@ barplot(Proportion, names.arg = Year, ylab = "Proportion")
 ```
 
 # Create variable for entry and exit into the labor force. 
-Constructing a dataframe with aggregated data on level of persons (id_2015), making use of the dplyr package. 
+Constructing a dataframe with aggregated data on level of persons (id_2015), making use of the dplyr package. The following code aggregates all contracts for teachers (FUNGRP_PVE1 == 2) in secondary ecuation (SECDJV == "WVO") in a dataframe with one record for every teacher. 
 
 ```{r}
 if (!require("dplyr")){
@@ -342,64 +342,712 @@ if (!require("dplyr")){
   require("dplyr")
 }
 citation("dplyr")
-```
-Hadley Wickham and Romain Francois (2015). dplyr: A Grammar of Data Manipulation. R package version 0.4.3. https://CRAN.R-project.org/package=dplyr
 
-The following code aggregates all contracts for teachers (FUNGRP_PVE1 == 2) in a dataframe with one record for every teacher. It takes approximately 8 minutes to run. 
+if (!require("ggplot2")){
+  install.packages("ggplot2")
+  require("ggplot2")
+}
+citation("ggplot2")
 
-```{r}
 id_data <- data %>% 
-  filter(REGFORM == 1) %>%
-  filter(2 %in% FUNGRP_PVE1) %>%
+  filter(FUNGRP_PVE1 == 2) %>%
+  filter(SECDJV == "WVO") %>%
   group_by(id_2015) %>% 
   summarise(
     min_year = min(JAAR, na.rm = TRUE), 
     max_year = max(JAAR, na.rm = TRUE), 
-    total_years = max(JAAR, na.rm = TRUE) - min(JAAR, na.rm = TRUE), 
+    # total_years_in_out = 1 + max(JAAR, na.rm = TRUE) - min(JAAR, na.rm = TRUE), 
+    total_years_in_out = 1 + max_year - min_year, 
     age_in = min(age, na.rm = TRUE), 
-    age_out = max(age, na.rm = TRUE) 
+    age_out = max(age, na.rm = TRUE), 
+    weaklink_id = TRUE %in% weaklink 
 )
+
+xtabs(~ min_year + max_year, data = id_data, exclude = NULL, na.action = "na.pass")
+xtabs(~ total_years_in_out, data = id_data, exclude = NULL, na.action = "na.pass")
+qplot(id_data$age_in)
+qplot(id_data$age_out)
+
+# There is no way to establish what the first year as teacher was before the first year of the data, nor is there a way to establish what the last year as teacher was before the last year of the data. First and last years, and age at entry and exit cannot be established. These values are set to NA. 
+
+id_data$min_year[id_data$min_year == min(data$JAAR, na.rm = TRUE)] <- NA  
+id_data$max_year[id_data$max_year == max(data$JAAR, na.rm = TRUE)] <- NA  
+id_data$age_in[is.na(id_data$min_year)] <- NA  
+id_data$age_out[is.na(id_data$max_year)] <- NA  
+
+id_data <- id_data %>% 
+  mutate(
+    total_years_in_out = 1 + max_year - min_year
+    )
+
+xtabs(~ min_year + max_year, data = id_data, exclude = NULL, na.action = "na.pass")
+xtabs(~ total_years_in_out, data = id_data, exclude = NULL, na.action = "na.pass")
+qplot(id_data$age_in)
+qplot(id_data$age_out)
+
 ```
 
-The following code aggregates all contracts per person per year in a dataframe. The dataframe includes a variable for age in that year and dummy variables for weak link, sector of the contract (SECDJV), management (FUNGRP_PVE1 == 1), teacher (FUNGRP_PVE1 == 2), educational support staff (FUNGRP_PVE1 == 3), facility support staff (FUNGRP_PVE1 == 4) and teacher in training (LIO) (FUNGRP == 5). It takes approximately 30 minutes to run. 
+The following code aggregates all contracts per person per year in a dataframe. The dataframe only includes data on teachers (FUNGRP_PVE1 == 2) in secondary education (SECDJV == "WVO"). The dataframe includes a variable for the number of contract in that year, the age in that year and dummy variables for weak link. Arranging by OMVBTR_C ensures the largest contract is used for selecting school (BRIN) if a teacher works at more than one BRIN in one year. It takes approximately 2 minutes to run. 
 
 ```{r}
+data <- arrange(data, id_2015, JAAR, OMVBTR_C)
+
 id_data_year <- data %>% 
-  filter(REGFORM == 1) %>%
+  filter(FUNGRP_PVE1 == 2) %>%
+  filter(SECDJV == "WVO") %>%
   group_by(id_2015, JAAR) %>% 
   summarise(
-    weaklink_id = TRUE %in% weaklink, 
+    weaklink_id = TRUE %in% weaklink,
+    n_contracts = n(), 
     age_year=max(age, na.rm = TRUE), 
-    WPO = "WPO" %in% SECDJV, 
-    WVO = "WVO" %in% SECDJV, 
-    WEB = "WEB" %in% SECDJV, 
-    AOC = "AOC" %in% SECDJV, 
-    management = 1 %in% FUNGRP_PVE1, 
-    teacher = 2 %in% FUNGRP_PVE1, 
-    support = 3 %in% FUNGRP_PVE1, 
-    facility = 4 %in% FUNGRP_PVE1, 
-    LIO = 5 %in% FUNGRP_PVE1
+    BRIN = max(BRIN)
   )
+
+id_data_year$BRINJAAR <- paste0(id_data_year$BRIN, "_", id_data_year$JAAR)
 ```
 
-Merge the two dataframes to get one dataframe with persons per year, with variables for first and last year of each person in the dataset. 
+Merge the two dataframes to get one dataframe with persons per year, with variables for first and last year of each person in the dataset. Add variables for experience, gap years and dummy variable for entry and exit year. 
 ```{r}
-id_data_year <- merge(id_data_year, id_data, all = TRUE)
+id_data_year <- left_join(id_data_year, id_data, by = "id_2015")
+id_data_year <- id_data_year %>% 
+  mutate(experience_current_in = (JAAR - min_year + 1))
+id_data_year <- arrange(id_data_year, id_2015, JAAR)
+
+id_data_year <- id_data_year %>%
+  group_by(id_2015) %>% 
+  mutate(sum_n_contracts = sum(n_contracts)) %>%
+  mutate(years_in_data = row_number()) %>%
+  mutate(gap_years = (experience_current_in - years_in_data))
+
+id_data_year$first_year <- FALSE
+id_data_year$first_year[id_data_year$JAAR == id_data_year$min_year] <- TRUE
+id_data_year$first_year[is.na(id_data_year$min_year)] <- NA
+id_data_year$last_year <- FALSE
+id_data_year$last_year[id_data_year$JAAR == id_data_year$max_year] <- TRUE
+id_data_year$last_year[is.na(id_data_year$max_year)] <- NA
+
+table(id_data_year$experience_current_in, useNA = "ifany")
+table(id_data_year$years_in_data, useNA = "ifany")
+table(id_data_year$gap_years, useNA = "ifany")
+table(id_data_year$first_year, useNA = "ifany")
+table(id_data_year$last_year, useNA = "ifany")
+table(id_data_year$first_year, id_data_year$JAAR, useNA = "ifany")
+table(id_data_year$last_year, id_data_year$JAAR, useNA = "ifany")
 ```
 
-
-Plotting age distribution per year of population of teachers, of leaving teachers, and of entering teachers (sector VO). 
+Adding certification data
 ```{r}
-par(mfrow=c(4,6))
+## Certification data merge
+if (!require("haven")){
+  install.packages("haven")
+  require("haven")
+}
+
+if (!require("dplyr")){
+  install.packages("dplyr")
+  require("dplyr")
+}
+
+if (!require("tidyr")){
+  install.packages("tidyr")
+  require("tidyr")
+}
+
+if (!require("xlsx")){
+  install.packages("xlsx")
+  require("xlsx")
+}
+
+certification <-read_spss("C:/Users/Thijs/Documents/MIRROR/data/HO bestand.sav")
+
+teacher_training <- read.xlsx("C:/Users/Thijs/Documents/MIRROR/data/croho.xlsx", 1)
+teacher_training <- teacher_training %>% fill(SUBCATEGORIEÃ.N)
+teacher_training$CLUSTERCATORIEÃ.N[teacher_training$CLUSTERCATORIEÃ.N == " "] <- NA
+teacher_training <- teacher_training %>% fill(CLUSTERCATORIEÃ.N)
+
+teacher_training$teacher_vo <- grepl("leraar vo", teacher_training$SUBCATEGORIEÃ.N)
+
+list_teacher_training <- teacher_training$CODE
+list_vo_teacher_training <- teacher_training$CODE[teacher_training$teacher_vo == TRUE]
+
+# ## Variable field of study
+# print_labels(certification$criond) 
+#   ## Value 1 has label Education
+# prop.table(xtabs(~ certification$criond, data = certification))
+#   ## 74.00% of the records is from a study in the field of education. 
+#   ## Notable other fields: Behaviour and society (8.00%) and language and culture (7.12%). 
+# 
+# ## Variable subfield of study
+# print_labels(certification$crisond) 
+#   ## Values 0-4, 18 have labels related to teacher education
+#   ## value                                                    label
+#   ## 0                                        leraar basisonderwijs
+#   ## 1                                           n.v.t. (onderwijs)
+#   ## 2                             universitaire lerarenopleidingen
+#   ## 3                        lerarenopleidingen speciaal onderwijs
+#   ## 4 opleidingen tot leraar vo van de 1e graad in algemene vakken
+#   ## 18               lerarenopleidingen op het gebied van de kunst
+# 
+# prop.table(xtabs(~ certification$crisond, data = certification[certification$criond == 1,]))
+#   ## Many record from the field of study of education have other subfields of education than teacher education
+#   ## 38.79% have label primary education teacher training (0), 
+#   ## 22.60% lower secondary education teacher training (1), 
+#   ## 1.56% universitairy teacher training program (upper secondary education) (2), 
+#   ## 6.09% special education teacher training (3), 
+#   ## 1.91% upper secondary education teacher training (4), 
+# ## Decided to use Education (value 1 in variable criond) as field of study as proxy for teacher training. 
+
+## Creating dataframe with certification information per teachers
+certification$dipjaar[certification$dipjaar == 0] <- NA
+
+a <- certification %>% group_by(id_2015) %>% summarise(startstudy = min(jaar))
+prop.table(xtabs(~ startstudy, data = a, exclude = NULL, na.action = "na.pass"))
+
+b <- certification %>% group_by(id_2015) %>% filter((diphbo > 1 & diphbo != 6) | (dipwo != 1)) %>% summarise(diploma = min(dipjaar, na.rm = TRUE))
+prop.table(xtabs(~ diploma, data = b, exclude = NULL, na.action = "na.pass"))
+
+c <- certification %>% filter(criact %in% list_teacher_training) %>% group_by(id_2015) %>% summarise(ed_startstudy = min(jaar))
+prop.table(xtabs(~ ed_startstudy, data = c, exclude = NULL, na.action = "na.pass"))
+
+d <- certification %>% filter(criact %in% list_teacher_training) %>% group_by(id_2015) %>% filter((diphbo > 1 & diphbo != 6) | (dipwo != 1)) %>% summarise(ed_diploma = min(dipjaar, na.rm = TRUE))
+prop.table(xtabs(~ ed_diploma, data = d, exclude = NULL, na.action = "na.pass"))
+
+e <- certification %>% filter(criact %in% list_vo_teacher_training) %>% group_by(id_2015) %>% summarise(vo_startstudy = min(jaar))
+prop.table(xtabs(~ ed_startstudy, data = c, exclude = NULL, na.action = "na.pass"))
+
+f <- certification %>% filter(criact %in% list_vo_teacher_training) %>% group_by(id_2015) %>% filter((diphbo > 1 & diphbo != 6) | (dipwo != 1)) %>% summarise(vo_diploma = min(dipjaar, na.rm = TRUE))
+prop.table(xtabs(~ ed_diploma, data = d, exclude = NULL, na.action = "na.pass"))
+
+## verschil hbo-wo
+## hbo
+g <- certification %>% group_by(id_2015) %>% filter(diphbo > 1 & diphbo != 6) %>% summarise(diploma_hbo = min(dipjaar, na.rm = TRUE))
+h <- certification %>% filter(criact %in% list_teacher_training) %>% filter(!is.na(diphbo)) %>% group_by(id_2015) %>% summarise(ed_startstudy_hbo = min(jaar))
+i <- certification %>% filter(criact %in% list_teacher_training) %>% filter(diphbo > 1 & diphbo != 6) %>% group_by(id_2015) %>% summarise(ed_diploma_hbo = min(dipjaar, na.rm = TRUE))
+j <- certification %>% filter(criact %in% list_vo_teacher_training) %>% filter(!is.na(diphbo)) %>% group_by(id_2015) %>% summarise(vo_startstudy_hbo = min(jaar))
+k <- certification %>% filter(criact %in% list_vo_teacher_training) %>% filter(diphbo > 1 & diphbo != 6) %>% group_by(id_2015) %>% summarise(vo_diploma_hbo = min(dipjaar, na.rm = TRUE))
+
+## wo
+l <- certification %>% group_by(id_2015) %>% filter(dipwo != 1) %>% summarise(diploma_wo = min(dipjaar, na.rm = TRUE))
+m <- certification %>% filter(criact %in% list_teacher_training) %>% filter(!is.na(dipwo)) %>% group_by(id_2015) %>% summarise(ed_startstudy_wo = min(jaar))
+n <- certification %>% filter(criact %in% list_teacher_training) %>% filter(dipwo != 1) %>% group_by(id_2015) %>% summarise(ed_diploma_wo = min(dipjaar, na.rm = TRUE))
+o <- certification %>% filter(criact %in% list_vo_teacher_training) %>% filter(!is.na(dipwo)) %>% group_by(id_2015) %>% summarise(vo_startstudy_wo = min(jaar))
+p <- certification %>% filter(criact %in% list_vo_teacher_training) %>% filter(dipwo != 1) %>% group_by(id_2015) %>% summarise(vo_diploma_wo = min(dipjaar, na.rm = TRUE))
+
+id_certification <- full_join(a, 
+                    full_join(b, 
+                    full_join(c, 
+                    full_join(d, 
+                    full_join(e, 
+                    full_join(f, 
+                    full_join(g,
+                    full_join(h,
+                    full_join(i,
+                    full_join(j,
+                    full_join(k,
+                    full_join(l,
+                    full_join(m,
+                    full_join(n,
+                    full_join(o,
+                    p
+                    )))))))))))))))
+
+rm(a); rm(b); rm(c); rm(d); rm(e); rm(f); 
+summary(id_certification)
+xtabs(~ ed_startstudy + ed_diploma, data = id_certification, exclude = NULL, na.action = "na.pass")
+xtabs(~ vo_startstudy + vo_diploma, data = id_certification, exclude = NULL, na.action = "na.pass")
+
+
+## Merging certification data in existing dataframes on teachers
+for (i in colnames(id_certification)[-1]){
+  id_data[i] <- NULL
+  id_data_year[i] <- NULL
+} 
+
+id_data <- left_join(id_data, id_certification, by = "id_2015")
+id_data_year <- left_join(id_data_year, id_certification, by = "id_2015")
+
+
+## Create variables in id_data and id_data_year for certification at entry
+# Certified teacher at entry
+id_data$certified_start <- FALSE
+id_data$certified_start[
+  id_data$vo_diploma <= id_data$min_year] <- TRUE
+
+id_data_year$certified_start <- FALSE
+id_data_year$certified_start[
+  id_data_year$vo_diploma <= id_data_year$min_year] <- TRUE
+
+# Certified teacher within 2 years after entry (excludes certified teachers at entry)
+id_data$certified_2year <- FALSE
+id_data$certified_2year[
+  (id_data$vo_diploma <= id_data$min_year + 2) & 
+  (id_data$certified_start == FALSE)] <- TRUE
+
+id_data_year$certified_2year <- FALSE
+id_data_year$certified_2year[
+  (id_data_year$vo_diploma <= id_data_year$min_year + 2) & 
+  (id_data_year$certified_start == FALSE)] <- TRUE
+
+# Certified teacher within 4 years after entry (excludes certified teachers at entry)
+id_data$certified_4year <- FALSE
+id_data$certified_4year[
+  (id_data$vo_diploma <= id_data$min_year + 4) & 
+  (id_data$certified_start == FALSE) & 
+  (id_data$certified_2year == FALSE)] <- TRUE
+
+id_data_year$certified_4year <- FALSE
+id_data_year$certified_4year[
+  (id_data_year$vo_diploma <= id_data_year$min_year + 4) & 
+  (id_data_year$certified_start == FALSE) & 
+  (id_data_year$certified_2year == FALSE)] <- TRUE
+
+# Certified teacher at entry, but not for secondary education
+id_data$certified_non_vo_start <- FALSE
+id_data$certified_non_vo_start[
+  (id_data$ed_diploma <= id_data$min_year) & 
+  (id_data$certified_start == FALSE)] <- TRUE
+
+id_data_year$certified_non_vo_start <- FALSE
+id_data_year$certified_non_vo_start[
+  (id_data_year$ed_diploma <= id_data_year$min_year) & 
+  (id_data_year$certified_start == FALSE)] <- TRUE
+
+# Non-teacher higher education completed at entry (excludes certified teachers at entry)
+id_data$higher_ed_non_teacher <- FALSE
+id_data$higher_ed_non_teacher[
+  (id_data$diploma <= id_data$min_year) & 
+  (id_data$certified_start == FALSE) & 
+  (id_data$certified_non_vo_start == FALSE)] <- TRUE
+
+id_data_year$higher_ed_non_teacher <- FALSE
+id_data_year$higher_ed_non_teacher[
+  (id_data_year$diploma <= id_data_year$min_year) & 
+  (id_data_year$certified_start == FALSE) & 
+  (id_data_year$certified_non_vo_start == FALSE)] <- TRUE
+
+# Student teacher at entry (excludes certified teachers at entry)
+id_data$student_teacher_start <- FALSE
+id_data$student_teacher_start[
+  (id_data$vo_startstudy <= id_data$min_year) & 
+  (id_data$certified_start == FALSE)] <- TRUE
+
+id_data_year$student_teacher_start <- FALSE
+id_data_year$student_teacher_start[
+  (id_data_year$vo_startstudy <= id_data_year$min_year) & 
+  (id_data_year$certified_start == FALSE)] <- TRUE
+
+# Student non-teacher at entry (excludes all student teachers and all completed higher education (certified teachers and non-certified teachers with higher education completed before entry))
+id_data$student_non_teacher_start <- FALSE
+id_data$student_non_teacher_start[
+  (id_data$startstudy <= id_data$min_year) & 
+  (id_data$student_teacher_start == FALSE) & 
+  (id_data$certified_start == FALSE) & 
+  (id_data$certified_non_vo_start == FALSE) & 
+  (id_data$higher_ed_non_teacher == FALSE)] <- TRUE
+
+id_data_year$student_non_teacher_start <- FALSE
+id_data_year$student_non_teacher_start[
+  (id_data_year$startstudy <= id_data_year$min_year) & 
+  (id_data_year$student_teacher_start == FALSE) & 
+  (id_data_year$certified_start == FALSE) & 
+  (id_data_year$certified_non_vo_start == FALSE) & 
+  (id_data_year$higher_ed_non_teacher == FALSE)] <- TRUE
+
+###########################
+id_data$certification_status <- "Unknown"
+id_data_year$certification_status <- "Unknown"
+
+# Student non-teacher at entry (excludes certified teachers and non-certified teachers with higher education completed before entry)
+id_data$certification_status[
+  (id_data$student_non_teacher_start == TRUE)] <- "Student non-teacher higher education, no diploma"
+
+id_data_year$certification_status[
+  (id_data_year$student_non_teacher_start == TRUE)] <- "Student non-teacher higher education, no diploma"
+
+# Higher education completed at entry, non-teacher, non-student teacher (excludes certified teachers and student teachers)
+id_data$certification_status[
+  (id_data$higher_ed_non_teacher == TRUE)] <- "Non-teacher higher education diploma at entry, not in teacher training"
+
+id_data_year$certification_status[
+  (id_data_year$higher_ed_non_teacher == TRUE)] <- "Non-teacher higher education diploma at entry, not in teacher training"
+
+# Teacher education completed at entry, but not for secondary education, non-student teacher (excludes certified teachers and student teachers)
+id_data$certification_status[
+  (id_data$certified_non_vo_start == TRUE)] <- "Non-teacher higher education diploma at entry, not in teacher training"
+
+id_data_year$certification_status[
+  (id_data_year$certified_non_vo_start == TRUE)] <- "Non-teacher higher education diploma at entry, not in teacher training"
+
+# Student teacher at entry (excludes all certified teachers at entry and non-teacher higher education diploma)
+id_data$certification_status[
+  (id_data$student_teacher_start == TRUE) & 
+  (id_data$certified_start == FALSE) & 
+  (id_data$higher_ed_non_teacher == FALSE) & 
+  (id_data$certified_non_vo_start == FALSE)] <- "Student teacher at entry, no higher education diploma"
+
+id_data_year$certification_status[
+  (id_data_year$student_teacher_start == TRUE) & 
+  (id_data_year$certified_start == FALSE) &
+  (id_data_year$higher_ed_non_teacher == FALSE) & 
+  (id_data_year$certified_non_vo_start == FALSE)] <- "Student teacher at entry, no higher education diploma"
+
+
+# Higher education completed at entry, non-teacher, student teacher (excludes certified teachers)
+id_data$certification_status[
+  (id_data$higher_ed_non_teacher == TRUE) & 
+  (id_data$student_teacher_start == TRUE) & 
+  (id_data$certified_non_vo_start == FALSE) & 
+  (id_data$certified_start == FALSE)] <- "Student teacher at entry, non-teacher higher education diploma"
+
+id_data_year$certification_status[
+  (id_data_year$higher_ed_non_teacher == TRUE) & 
+  (id_data_year$student_teacher_start == TRUE) & 
+  (id_data_year$certified_non_vo_start == FALSE) & 
+  (id_data_year$certified_start == FALSE)] <- "Student teacher at entry, non-teacher higher education diploma"
+
+# Teacher education completed at entry, but not for secondary education, and also student teacher (only excludes teachers with certification for secondary education)
+id_data$certification_status[
+  (id_data$certified_non_vo_start == TRUE) & 
+  (id_data$student_teacher_start == TRUE) & 
+  (id_data$certified_start == FALSE)] <- "Student teacher at entry, also completed non-secondary education teacher training"
+
+id_data_year$certification_status[
+  (id_data_year$certified_non_vo_start == TRUE) & 
+  (id_data_year$student_teacher_start == TRUE) & 
+  (id_data_year$certified_start == FALSE)] <- "Student teacher at entry, also completed non-secondary education teacher training"
+  
+# Certified teacher at entry
+id_data$certification_status[
+  id_data$certified_start == TRUE] <- "Certified teacher at entry"
+
+id_data_year$certification_status[
+  id_data_year$certified_start == TRUE] <- "Certified teacher at entry"
+
+# converting to factors + tables to check data transformations
+id_data$certification_status <- as.factor(id_data$certification_status)
+id_data_year$certification_status <- as.factor(id_data_year$certification_status)
+
+xtabs(data = id_data, ~certification_status)
+xtabs(data = id_data_year, ~certification_status)
+```
+
+Adding variables to indicate unlikely data (outliers in school data)
+```{r}
+
+```
+
+Plotting age distribution per year of population of teachers, of leaving teachers, and of entering teachers (sector VO), Using ggplot2
+```{r}
+if (!require("ggplot2")){
+  install.packages("ggplot2")
+  require("ggplot2")
+}
+citation("ggplot2")
+
+plot_age <- ggplot(id_data_year, aes())
+plot_age + 
+  geom_density(
+    aes(age_year, color = "Teacher population")) + 
+  geom_density(
+    data = id_data_year[id_data_year$JAAR == id_data_year$max_year,], 
+    aes(age_year, color = "Teachers leaving profession")) + 
+  geom_density(
+    data = id_data_year[id_data_year$JAAR == id_data_year$min_year,], 
+    aes(age_year, color = "Teachers entering profession")) + 
+  labs(x = "Age") + 
+  facet_wrap(~ JAAR)
+
+plot_age + 
+  geom_density(
+    aes(age_year, color = "Teacher population")) + 
+  geom_density(
+    data = id_data_year[id_data_year$JAAR == id_data_year$max_year,], 
+    aes(age_year, color = "Teachers leaving profession")) + 
+  geom_density(
+    data = id_data_year[id_data_year$JAAR == id_data_year$min_year,], 
+    aes(age_year, color = "Teachers entering profession")) + 
+  labs(x = "Age") + 
+  facet_wrap(~ certification_status)
+
+## group by all categories of certification at start
+# exit_entry_age <- 
+#   id_data_year %>% 
+#   group_by(certification_status, age_year) %>% 
+#   summarise(n = n())
+# 
+# exit_entry_age <- full_join(exit_entry_age, 
+#   id_data_year %>% 
+#   filter(JAAR == min_year) %>% 
+#   group_by(certification_status, age_year) %>% 
+#   summarise(n_entry = n())
+#   )
+#   
+# exit_entry_age <- full_join(exit_entry_age, 
+#   id_data_year %>% 
+#   filter(JAAR == max_year) %>% 
+#   group_by(certification_status, age_year) %>% 
+#   summarise(n_exit = n())
+#   )
+
+## group by certified teacher at start or not (corrected for unlikely data by multivariate measure)
+## to-do: rerun creation of id_data(_year) and correctly add variables for outlyiness. 
+exit_entry_age <- 
+  id_data_year %>% 
+  filter(outlier_mulitivar_BRIN == FALSE) %>%
+  group_by(certified_start, age_year) %>% 
+  summarise(n = n())
+
+exit_entry_age <- full_join(exit_entry_age, 
+  id_data_year %>% 
+  filter(outlier_mulitivar_BRIN == FALSE) %>%
+  filter(JAAR == min_year) %>% 
+  group_by(certified_start, age_year) %>% 
+  summarise(n_entry = n())
+  )
+  
+exit_entry_age <- full_join(exit_entry_age, 
+  id_data_year %>% 
+  filter(outlier_mulitivar_BRIN == FALSE) %>%
+  filter(JAAR == max_year) %>% 
+  group_by(certified_start, age_year) %>% 
+  summarise(n_exit = n())
+  )
+
+exit_entry_age_total <- 
+  id_data_year %>% 
+  filter(outlier_mulitivar_BRIN == FALSE) %>%
+  group_by(age_year) %>% 
+  summarise(n = n())
+
+exit_entry_age$prop_entry <- exit_entry_age$n_entry / exit_entry_age$n
+exit_entry_age$prop_exit <- exit_entry_age$n_exit / exit_entry_age$n
+exit_entry_age_total$prop_entry <- exit_entry_age$n_entry / exit_entry_age$n
+exit_entry_age_total$prop_exit <- exit_entry_age$n_exit / exit_entry_age$n
+
+plot_age <- ggplot(exit_entry_age %>% filter(age_year > 22 & age_year < 45), aes())
+plot_age + 
+  geom_line(
+    aes(age_year, prop_exit, 
+    colour = certified_start)) + 
+  labs(x = "Age", y = "proportion of teachers leaving profession", colour = "certified teacher at entry") 
+
+plot_age <- ggplot(exit_entry_age_total %>% filter(age_year > 22 & age_year < 45), aes())
+plot_age + 
+  geom_line(
+    aes(age_year, prop_exit)) + 
+  labs(x = "Age", y = "proportion of teachers leaving profession", colour = "certified teacher at entry") 
+
+##########
+## Plot exit rate by experience year, grouped by certified teacher at start or not (not corrected for unlikely data)
+
+exit_experience <- 
+  id_data_year %>% 
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  group_by(certified_start, experience_current_in) %>% 
+  summarise(n = n())
+
+exit_experience <- full_join(exit_experience, 
+  id_data_year %>% 
+  filter(!is.na(max_year)) %>%
+  filter(JAAR == max_year) %>% 
+  group_by(certified_start, experience_current_in) %>% 
+  summarise(n_exit = n())
+  )
+
+exit_experience_total <- 
+  id_data_year %>% 
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  group_by(experience_current_in) %>% 
+  summarise(n = n())
+  
+exit_experience_total <- full_join(exit_experience_total, 
+  id_data_year %>% 
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  filter(!is.na(max_year)) %>%
+  filter(JAAR == max_year) %>% 
+  group_by(experience_current_in) %>% 
+  summarise(n_exit = n())
+  )
+  
+exit_experience$prop_exit <- exit_experience$n_exit / exit_experience$n
+exit_experience_total$prop_exit <- exit_experience_total$n_exit / exit_experience_total$n
+
+plot_age <- ggplot(exit_experience %>% filter(), aes())
+plot_age + 
+  geom_line(
+    aes(experience_current_in, prop_exit, colour = certified_start)) +
+  geom_line(
+    data = exit_experience_total,
+    aes(experience_current_in, prop_exit)) + 
+  labs(
+    x = "Number of years since entry",
+    y = "Proportion of teachers leaving profession",
+    colour = "Certified teacher at entry")
+
+#####
+## Plot exit rate by experience year, grouped by certified teacher at start or not (corrected for unlikely data, DUO-definition)
+
+exit_experience_corrected <- 
+  id_data_year %>% 
+  filter(outlier_DUO_BRIN == FALSE) %>%
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  group_by(certified_start, experience_current_in) %>% 
+  summarise(n = n())
+
+exit_experience_corrected <- full_join(exit_experience_corrected, 
+  id_data_year %>% 
+  filter(outlier_DUO_BRIN == FALSE) %>%
+  filter(!is.na(max_year)) %>%
+  filter(JAAR == max_year) %>% 
+  group_by(certified_start, experience_current_in) %>% 
+  summarise(n_exit = n())
+  )
+
+exit_experience_corrected_total <- 
+  id_data_year %>% 
+  filter(outlier_DUO_BRIN == FALSE) %>%
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  group_by(experience_current_in) %>% 
+  summarise(n = n())
+  
+exit_experience_corrected_total <- full_join(exit_experience_corrected_total, 
+  id_data_year %>% 
+  filter(outlier_DUO_BRIN == FALSE) %>%
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  filter(!is.na(max_year)) %>%
+  filter(JAAR == max_year) %>% 
+  group_by(experience_current_in) %>% 
+  summarise(n_exit = n())
+  )
+  
+exit_experience_corrected$prop_exit <- exit_experience_corrected$n_exit / exit_experience_corrected$n
+exit_experience_corrected_total$prop_exit <- exit_experience_corrected_total$n_exit / exit_experience_corrected_total$n
+
+plot_age <- ggplot(exit_experience_corrected %>% filter(), aes())
+plot_age + 
+  geom_line(
+    aes(experience_current_in, prop_exit, 
+    colour = certified_start)) +
+  geom_line(
+    data = exit_experience_corrected_total,
+    aes(experience_current_in, prop_exit)) +
+  labs(
+    x = "Number of years since entry",
+    y = "Proportion of teachers leaving profession",
+    colour = "Certified teacher at entry")
+
+## Compare exit rate with and without correction for unlikely data
+plot_age_compare_correction <- ggplot(exit_experience_corrected %>% filter(), aes())
+plot_age_compare_correction + 
+  geom_line(
+    aes(experience_current_in, prop_exit, colour = certified_start)) +
+  geom_line(
+    data = exit_experience,
+    aes(experience_current_in, prop_exit, linetype = certified_start)) +
+  # geom_line(
+  #   data = exit_experience_corrected_total,
+  #   aes(experience_current_in, prop_exit)) + 
+  labs(
+    x = "Number of years since entry",
+    y = "Proportion of teachers leaving profession",
+    colour = "Certified teacher at entry (corrected)", 
+    linetype = "Certified teacher at entry (uncorrected)"
+    )
+
+#####
+## Plot exit rate by experience year, grouped by certified teacher at start or not (corrected for unlikely data, multivariate-definition)
+
+exit_experience_corrected <- 
+  id_data_year %>% 
+  filter(outlier_mulitivar_BRIN == FALSE) %>%
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  group_by(certified_start, experience_current_in) %>% 
+  summarise(n = n())
+
+exit_experience_corrected <- full_join(exit_experience_corrected, 
+  id_data_year %>% 
+  filter(outlier_mulitivar_BRIN == FALSE) %>%
+  filter(!is.na(max_year)) %>%
+  filter(JAAR == max_year) %>% 
+  group_by(certified_start, experience_current_in) %>% 
+  summarise(n_exit = n())
+  )
+
+exit_experience_corrected_total <- 
+  id_data_year %>% 
+  filter(outlier_mulitivar_BRIN == FALSE) %>%
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  group_by(experience_current_in) %>% 
+  summarise(n = n())
+  
+exit_experience_corrected_total <- full_join(exit_experience_corrected_total, 
+  id_data_year %>% 
+  filter(outlier_mulitivar_BRIN == FALSE) %>%
+  # filter(!is.na(min_year)) %>%
+  # filter(!is.na(max_year)) %>%
+  filter(!is.na(max_year)) %>%
+  filter(JAAR == max_year) %>% 
+  group_by(experience_current_in) %>% 
+  summarise(n_exit = n())
+  )
+  
+exit_experience_corrected$prop_exit <- exit_experience_corrected$n_exit / exit_experience_corrected$n
+exit_experience_corrected_total$prop_exit <- exit_experience_corrected_total$n_exit / exit_experience_corrected_total$n
+
+plot_age <- ggplot(exit_experience_corrected %>% filter(), aes())
+plot_age + 
+  geom_line(
+    aes(experience_current_in, prop_exit,
+    colour = certified_start)) +
+  # geom_line(
+  #   data = exit_experience_corrected_total,
+  #   aes(experience_current_in, prop_exit)) +
+  labs(
+    x = "Number of years since entry",
+    y = "Proportion of teachers leaving profession",
+    colour = "Certified teacher at entry")
+
+# write.csv2(exit_experience_corrected, "exit_experience_corrected.csv")
+
+## Compare exit rate with and without correction for unlikely data (multivariate method)
+plot_age_compare_correction <- ggplot(exit_experience_corrected %>% filter(), aes())
+plot_age_compare_correction + 
+  geom_line(
+    aes(experience_current_in, prop_exit, colour = certified_start)) +
+  geom_line(
+    data = exit_experience,
+    aes(experience_current_in, prop_exit, linetype = certified_start)) +
+  # geom_line(
+  #   data = exit_experience_corrected_total,
+  #   aes(experience_current_in, prop_exit)) + 
+  labs(
+    x = "Number of years since entry",
+    y = "Proportion of teachers leaving profession",
+    colour = "Certified teacher at entry (corrected)", 
+    linetype = "Certified teacher at entry (uncorrected)"
+    )
+
+```
+
+```{r}
+par(mfrow=c(4,4))
 
 for (i in c(1998, 2003, 2008, 2013)){
   age_total <- id_data_year$age_year[id_data_year$JAAR == i]
-  age_exit <- id_data_year$age_year[id_data_year$JAAR == i & id_data_year$max_year == i & id_data_year$WVO == TRUE & id_data_year$teacher == TRUE]
-  age_entry <- id_data_year$age_year[id_data_year$JAAR == i & id_data_year$min_year == i & id_data_year$WVO == TRUE & id_data_year$teacher == TRUE]
+  age_exit <- id_data_year$age_year[id_data_year$JAAR == i & id_data_year$max_year == i]
+  age_entry <- id_data_year$age_year[id_data_year$JAAR == i & id_data_year$min_year == i]
 
-  hist(age_total, ylim = c(0,12000), main = paste("Age of teachers in", i), xlab = "Age", breaks = min(id_data_year$age_year[id_data_year$JAAR == i], na.rm = TRUE):max(id_data_year$age_year[id_data_year$JAAR == i], na.rm = TRUE))
+  hist(age_total, ylim = c(0,3000), main = paste("Age of teachers in", i), xlab = "Age", breaks = min(id_data_year$age_year[id_data_year$JAAR == i], na.rm = TRUE):max(id_data_year$age_year[id_data_year$JAAR == i], na.rm = TRUE))
   hist(age_exit, ylim = c(0,700), main = paste("Age of teachers leaving the profession after", i), xlab = "Age", breaks = min(age_exit, na.rm = TRUE):max(age_exit, na.rm = TRUE))
-  hist(age_entry, ylim = c(0,500), main = paste("Age of teachers entering the profession in", i), xlab = "Age", breaks = min(age_entry, na.rm = TRUE):max(age_entry, na.rm = TRUE))
+  # hist(age_entry, ylim = c(0,500), main = paste("Age of teachers entering the profession in", i), xlab = "Age", breaks = min(age_entry, na.rm = TRUE):max(age_entry, na.rm = TRUE))
 
 freq_age_total <- as.data.frame(table(age_total))
 names(freq_age_total)[names(freq_age_total) == 'age_total'] <- 'Age'
@@ -417,12 +1065,67 @@ mobility <- merge(freq_age_total, (merge(freq_age_exit, freq_age_entry)))
 mobility$prop_out <- mobility$Freq_out / mobility$Freq_total
 mobility$prop_in <- mobility$Freq_in / mobility$Freq_total
 
-plot(mobility$Age, ylim = c(0, 0.25), mobility$prop_out, main = paste("Proportion of population of teachers that leave the profession, per age, in", i), ylab = "Proportion", xlab = "Age")
-plot(mobility$Age, ylim = c(0, 0.05), xlim = c(0,20), mobility$prop_out, main = paste("Proportion of population of teachers that leave the profession, per age (<30), in", i), ylab = "Proportion", xlab = "Age")
-plot(mobility$Age, ylim = c(0, 0.13), mobility$prop_in, main = paste("Proportion of population of teachers  that enter the profession, per age, in", i), ylab = "Proportion", xlab = "Age")
+plot(mobility$Age, ylim = c(0, 0.80), mobility$prop_out, main = paste("Proportion of teachers leaving the profession, per age, in", i), ylab = "Proportion", xlab = "Age")
+plot(mobility$Age, ylim = c(0, 0.35), xlim = c(0,35), mobility$prop_out, main = paste("Proportion of teachers leaving the profession, per age (<50), in", i), ylab = "Proportion", xlab = "Age")
+# plot(mobility$Age, ylim = c(0, 1), mobility$prop_in, main = paste("Proportion of teachers entering the profession, per age, in", i), ylab = "Proportion", xlab = "Age")
 
 write.csv2(mobility, paste0("E:/Google Drive/Promotie/Analyse/mobility", i, ".csv"))
 
+rm(age_total); rm(age_exit); rm(age_entry)
+rm(freq_age_total); rm(freq_age_exit); rm(freq_age_entry); rm(mobility)
+rm(i)
+
+}
+
+```
+
+Plotting experience distribution per year of population of teachers, of leaving teachers, and of entering teachers (sector VO). 
+```{r}
+par(mfrow=c(3, 2))
+
+for (i in (2008:2013)){
+  experience_total <- id_data_year$experience_year[id_data_year$JAAR == i]
+  hist(experience_total, ylim = c(0,15000), main = paste("Experience of teachers in", i), xlab = "Years of experience", breaks = min(id_data_year$experience_year[id_data_year$JAAR == i], na.rm = TRUE):max(id_data_year$experience_year[id_data_year$JAAR == i], na.rm = TRUE))
+  rm(experience_total)
+  rm(i)
+  }
+
+for (i in (2008:2013)){
+  experience_exit <- id_data_year$experience_year[id_data_year$JAAR == i & id_data_year$max_year == i]
+  hist(experience_exit, ylim = c(0,3000), main = paste("Experience of teachers leaving the profession after", i), xlab = "Years of experience", breaks = min(experience_exit, na.rm = TRUE):max(experience_exit, na.rm = TRUE))
+  rm(experience_exit)
+  rm(i)
+  }
+
+for (i in (2008:2013)){
+  experience_total <- id_data_year$experience_year[id_data_year$JAAR == i]
+  freq_experience_total <- as.data.frame(table(experience_total))
+  names(freq_experience_total)[names(freq_experience_total) == 'experience_total'] <- 'Experience'
+  names(freq_experience_total)[names(freq_experience_total) == 'Freq'] <- 'Freq_total'
+  
+  experience_exit <- id_data_year$experience_year[id_data_year$JAAR == i & id_data_year$max_year == i]
+  freq_experience_exit <- as.data.frame(table(experience_exit))
+  names(freq_experience_exit)[names(freq_experience_exit) == 'experience_exit'] <- 'Experience'
+  names(freq_experience_exit)[names(freq_experience_exit) == 'Freq'] <- 'Freq_out'
+  
+  mobility <- merge(freq_experience_total, freq_experience_exit)
+  mobility$prop_out <- mobility$Freq_out / mobility$Freq_total
+  
+  plot(mobility$Experience, mobility$prop_out, ylim = c(0, 0.40), main = paste("Proportion of teachers leaving the profession, per experience, in", i), ylab = "Proportion", xlab = "Years of experience")
+  
+  write.csv2(mobility, paste0("E:/Google Drive/Promotie/Analyse/mobility_experience", i, ".csv"))
+  
+  age_experience <- table(id_data_year$age_year[id_data_year$JAAR == i], id_data_year$experience_year[id_data_year$JAAR == i])
+  age_experience_prop <- prop.table(table(id_data_year$age_year[id_data_year$JAAR == i], id_data_year$experience_year[id_data_year$JAAR == i]))
+  
+  # write.csv2(age_experience, paste0("E:/Google Drive/Promotie/Analyse/age_experience_crosstab", i, ".csv"))
+  # write.csv2(age_experience_prop, paste0("E:/Google Drive/Promotie/Analyse/age_experience_crosstab_prop", i, ".csv"))
+  
+  rm(experience_total); rm(experience_exit)
+  rm(freq_experience_total); rm(freq_experience_exit); rm(mobility)
+  rm(age_experience); rm(age_experience_prop)
+  rm(i)
+  
 }
 
 ```
@@ -440,5 +1143,3 @@ data$FUNGRP_PVE1 <- factor(data$FUNGRP_PVE1,
 # data$FUNGRP_PVE1 <- factor(data$FUNGRP_PVE1,
 #   levels = c(1,2,3,4,5),
 #   labels = c("directie/management", "OP", "OOP", "OBP", "LIO"))
-
-

@@ -21,7 +21,18 @@ data <- read_spss("C:/Users/Thijs/Documents/MIRROR/data/mirror_formatie_ tm2014.
 testdata <- data[1:50001,]
 
 # Basic descriptives
-library(Hmisc)
+if (require("Hmisc")){
+  print("Hmisc is loaded correctly")
+} else {
+  print("trying to install Hmisc")
+  install.packages("Hmisc")
+  if(require("Hmisc")){
+    print("Hmisc installed and loaded")
+  } else {
+    stop("could not install Hmisc")
+  }
+}
+
 describe(data$FCAT[data$JAAR==2000], exclude.missing = F) 
 
 # Define NA in FUNGRP(_PVE1), BRIN, GEBDAT, GESLACHT
