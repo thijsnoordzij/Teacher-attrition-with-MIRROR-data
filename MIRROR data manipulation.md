@@ -748,12 +748,12 @@ plot_age <- ggplot(id_data_year, aes())
 plot_age + 
   geom_density(
     aes(age_year, color = "Teacher population")) + 
-  geom_density(
-    data = id_data_year[id_data_year$JAAR == id_data_year$max_year,], 
-    aes(age_year, color = "Teachers leaving profession")) + 
-  geom_density(
-    data = id_data_year[id_data_year$JAAR == id_data_year$min_year,], 
-    aes(age_year, color = "Teachers entering profession")) + 
+  # geom_density(
+  #   data = id_data_year[id_data_year$JAAR == id_data_year$max_year,], 
+  #   aes(age_year, color = "Teachers leaving profession")) + 
+  # geom_density(
+  #   data = id_data_year[id_data_year$JAAR == id_data_year$min_year,], 
+  #   aes(age_year, color = "Teachers entering profession")) + 
   labs(x = "Age") + 
   facet_wrap(~ JAAR)
 
